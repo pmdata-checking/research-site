@@ -368,7 +368,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       <button class="hbtn" id="exportBtn" onclick="openModal('exportModal')" style="display:none;">↓ Export</button>
       <button class="hbtn" id="activityBtn" onclick="goToActivity()">📊 Activity</button>
       <button class="hbtn" id="templatesBtn" onclick="goToTemplates()" style="display:none;">✉ Templates</button>
-      <button class="hbtn" id="usersBtn" onclick="goToUsers()">👥 Users</button>
+      <button class="hbtn" id="usersBtn" onclick="goToUsers()" style="display:none;">👥 Users</button>
       <button class="hbtn danger" onclick="doLogout()">Sign Out</button>
     </div>
   </header>
@@ -958,6 +958,7 @@ async function launch(){
   await loadEmailTemplates();
   // Show Templates button for superusers
   const tplBtn=gel('templatesBtn');if(tplBtn)tplBtn.style.display='';
+  const usrBtn=gel('usersBtn');if(usrBtn)usrBtn.style.display=isSuperuser?'':'none';
   hide('loading');gel('app').style.display='flex';
   history.replaceState({screen:'dashboard'},'');
   renderDashboard();
@@ -3442,9 +3443,9 @@ function renderUsers(users){
         </div>
       </div>
       <div class="user-actions">
-        <button class="user-action-btn" onclick="viewUserActivity('${esc(u.email)}')">View Activity</button>
-        <button class="user-action-btn" onclick="openEditName('${u.id}','${esc(name)}')">Edit Name</button>
-        <button class="user-action-btn" onclick="openResetPw('${u.id}','${esc(u.email)}')">Reset Password</button>
+        ${isSuperuser?`<button class="user-action-btn" onclick="viewUserActivity('${esc(u.email)}')">View Activity</button>`:''}
+        ${isSuperuser?`<button class="user-action-btn" onclick="openEditName('${u.id}','${esc(name)}')">Edit Name</button>`:''}
+        ${isSuperuser?`<button class="user-action-btn" onclick="openResetPw('${u.id}','${esc(u.email)}')">Reset Password</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn" onclick="openPermissions('${esc(u.email)}','${esc(name)}')">Permissions</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn" onclick="toggleSuperuser('${esc(u.email)}','${isSU}')">${isSU?'Remove Superuser':'Make Superuser'}</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn danger" onclick="deleteUser('${u.id}','${esc(u.email)}')">Remove</button>`:''}
