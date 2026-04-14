@@ -919,6 +919,7 @@ function mergeRecord(r){
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
 let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[];
+let _impersonating=false,_realRole=null,_realPerms=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
 let currentProjTab='queue',_editSourceTab='queue',pendingCSV=null,pendingHdrs=null,conflictRes={},projToDelete=null,_rtRenderTimer=null;
 const LOCK_TTL=600000;
@@ -950,6 +951,12 @@ async function init(){
   else{hide('loading');showEl('loginWrap');}
 }
 
+function updateNavVisibility(){
+  const tplBtn=gel('templatesBtn');if(tplBtn)tplBtn.style.display='';
+  const usrBtn=gel('usersBtn');if(usrBtn)usrBtn.style.display=isSuperuser?'':'none';
+  const expBtn=gel('exportBtn');// export visibility handled per-project in openProject
+}
+
 async function launch(){
   gel('userLabel').textContent=currentUser.email.split('@')[0];
   await Promise.all([loadProjects(), loadRole()]);
@@ -957,8 +964,7 @@ async function launch(){
   // Load email templates from DB (seed if empty)
   await loadEmailTemplates();
   // Show Templates button for superusers
-  const tplBtn=gel('templatesBtn');if(tplBtn)tplBtn.style.display='';
-  const usrBtn=gel('usersBtn');if(usrBtn)usrBtn.style.display=isSuperuser?'':'none';
+  updateNavVisibility();
   hide('loading');gel('app').style.display='flex';
   history.replaceState({screen:'dashboard'},'');
   renderDashboard();
@@ -3448,6 +3454,7 @@ function renderUsers(users){
         ${isSuperuser?`<button class="user-action-btn" onclick="openResetPw('${u.id}','${esc(u.email)}')">Reset Password</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn" onclick="openPermissions('${esc(u.email)}','${esc(name)}')">Permissions</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn" onclick="toggleSuperuser('${esc(u.email)}','${isSU}')">${isSU?'Remove Superuser':'Make Superuser'}</button>`:''}
+        ${isSuperuser&&!isMe&&!_impersonating?`<button class="user-action-btn" onclick="signInAs('${esc(u.email)}','${esc(name)}','${isSU}')" style="color:var(--teal);border-color:var(--teal);">Sign in as</button>`:''}
         ${isSuperuser&&!isMe?`<button class="user-action-btn danger" onclick="deleteUser('${u.id}','${esc(u.email)}')">Remove</button>`:''}
       </div>`;
     ul.appendChild(card);
@@ -3493,6 +3500,57 @@ async function savePermissions(){
   if(error){showToast('Failed to save permissions: '+error.message,'error');return;}
   closeModal('permsModal');
   showToast('Permissions updated for '+_permsEmail,'done');
+}
+
+async function signInAs(email,name,isSU){
+  if(_impersonating){showToast('Already impersonating — return to your account first','error');return;}
+  // Save real role/permissions
+  _realRole=isSuperuser;
+  _realPerms=[...currentUserPermissions];
+  _impersonating=true;
+  // Fetch the target user's role and permissions
+  const{data}=await sb.from('user_roles').select('role,permissions').eq('user_email',email).single();
+  isSuperuser=(data?.role==='superuser')||(isSU==='true');
+  currentUserPermissions=Array.isArray(data?.permissions)?data.permissions:[];
+  // Update UI to reflect impersonated role
+  gel('userLabel').textContent=name;
+  // Show impersonation banner
+  let banner=gel('impersonateBanner');
+  if(!banner){
+    banner=document.createElement('div');banner.id='impersonateBanner';
+    banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#7c3aed;color:#fff;padding:8px 22px;text-align:center;font-family:var(--font);font-size:12px;font-weight:700;z-index:999;cursor:pointer;';
+    banner.onclick=endImpersonation;
+    document.body.appendChild(banner);
+  }
+  const roleName=isSuperuser?'Superuser':'Researcher';
+  const permStr=currentUserPermissions.length?' + '+currentUserPermissions.join(', '):'';
+  banner.textContent='👁 Viewing as '+name+' ('+roleName+permStr+') — Click to return to your account';
+  banner.style.display='';
+  // Adjust header position
+  document.querySelector('header').style.marginTop='36px';
+  // Refresh the dashboard to show what this user sees
+  updateNavVisibility();
+  showToast('Now viewing as '+name,'info');
+  goToDashboard();
+}
+
+async function endImpersonation(){
+  if(!_impersonating)return;
+  _impersonating=false;
+  isSuperuser=_realRole;
+  currentUserPermissions=[..._realPerms];
+  _realRole=null;_realPerms=null;
+  // Restore real user label
+  gel('userLabel').textContent=currentUser.email.split('@')[0];
+  // Hide banner and restore header
+  const banner=gel('impersonateBanner');if(banner)banner.style.display='none';
+  document.querySelector('header').style.marginTop='';
+  // Show superuser UI elements again
+  const usrBtn=gel('usersBtn');if(usrBtn)usrBtn.style.display='';
+  const tplBtn=gel('templatesBtn');if(tplBtn)tplBtn.style.display='';
+  updateNavVisibility();
+  showToast('Returned to your account','done');
+  goToDashboard();
 }
 
 function openEditName(userId, currentName){
