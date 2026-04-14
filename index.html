@@ -836,7 +836,6 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div class="modal-actions">
       <button class="mbtn mbtn-primary" id="emailSendBtn" onclick="doSendEmail()">Send Email</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('emailModal');if(_emailResolve){_emailResolve();_emailResolve=null;}">Skip</button>
-      <button class="mbtn mbtn-cancel" onclick="closeModal('emailModal');if(_emailResolve){_emailResolve();_emailResolve=null;}">Cancel</button>
     </div>
   </div>
 </div>
@@ -920,6 +919,7 @@ const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Fir
 
 let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[];
 let _impersonating=false,_realRole=null,_realPerms=null;
+let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
 let currentProjTab='queue',_editSourceTab='queue',pendingCSV=null,pendingHdrs=null,conflictRes={},projToDelete=null,_rtRenderTimer=null;
 const LOCK_TTL=600000;
@@ -958,8 +958,12 @@ function updateNavVisibility(){
 }
 
 async function launch(){
-  gel('userLabel').textContent=currentUser.email.split('@')[0];
+  const _uname=getUserDisplayName().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+  gel('userLabel').textContent=_uname;
   await Promise.all([loadProjects(), loadRole()]);
+  // Cache session token for beforeunload lock release
+  const{data:{session:_s}}=await sb.auth.getSession();if(_s)_cachedSessionToken=_s.access_token;
+  sb.auth.onAuthStateChange((_e,s)=>{if(s)_cachedSessionToken=s.access_token;});
   setupRealtime();startLockHB();setupPresence();
   // Load email templates from DB (seed if empty)
   await loadEmailTemplates();
@@ -1026,7 +1030,7 @@ async function doSetPw(){
   await sb.auth.signOut();hide('resetWrap');showEl('loginWrap');
   gel('resetErr').textContent='Password set! Please sign in.';gel('resetErr').style.color='var(--done)';gel('resetErr').style.display='block';
 }
-async function doLogout(){await releaseLock(currentIdx);clearInterval(lockHB);clearInterval(lockCD);if(presenceCh){await presenceCh.untrack();sb.removeChannel(presenceCh);}if(rtCh)sb.removeChannel(rtCh);await sb.auth.signOut();location.reload();}
+async function doLogout(){await releaseLock(currentIdx);clearInterval(lockHB);clearInterval(lockCD);if(window._presenceHB)clearInterval(window._presenceHB);if(presenceCh){await presenceCh.untrack();sb.removeChannel(presenceCh);}if(rtCh)sb.removeChannel(rtCh);await sb.auth.signOut();location.reload();}
 
 async function loadProjects(){
   const[statsR,pinR]=await Promise.all([
@@ -1034,8 +1038,8 @@ async function loadProjects(){
     sb.from('projects').select('id,is_pinned,created_by')
   ]);
   // linked_to and brief may not exist yet — fetch separately and tolerate failure
-  let linkR={data:null};try{linkR=await sb.from('projects').select('id,linked_to');}catch(e){}
-  let briefR={data:null};try{briefR=await sb.from('projects').select('id,brief');}catch(e){}
+  let linkR={data:null};try{linkR=await sb.from('projects').select('id,linked_to');}catch(e){console.warn('linked_to column not available:',e.message);}
+  let briefR={data:null};try{briefR=await sb.from('projects').select('id,brief');}catch(e){console.warn('brief column not available:',e.message);}
   const extraMap={};
   (pinR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),is_pinned:!!p.is_pinned,created_by:p.created_by||''};});
   (linkR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),linked_to:p.linked_to||null};});
@@ -1058,8 +1062,10 @@ function openDeleteProjModal(id,name,e){
 }
 async function confirmDeleteProject(){
   if(!projToDelete)return;
-  await sb.from('records').delete().eq('project_id',projToDelete.id);
-  await sb.from('projects').delete().eq('id',projToDelete.id);
+  const{error:recErr}=await sb.from('records').delete().eq('project_id',projToDelete.id);
+  if(recErr){showToast('Failed to delete records: '+recErr.message,'error');return;}
+  const{error:projErr}=await sb.from('projects').delete().eq('id',projToDelete.id);
+  if(projErr){showToast('Failed to delete project: '+projErr.message,'error');return;}
   closeModal('deleteProjModal');projToDelete=null;
   await loadProjects();renderDashboard();showToast('Project deleted','info');
 }
@@ -1255,7 +1261,8 @@ function setupPresence(){
     if(status==='SUBSCRIBED')await trackPresence();
   });
   // Update presence every 30s to keep status fresh
-  setInterval(trackPresence,30000);
+  if(window._presenceHB)clearInterval(window._presenceHB);
+  window._presenceHB=setInterval(trackPresence,30000);
 }
 async function trackPresence(){
   if(!presenceCh)return;
@@ -2058,6 +2065,7 @@ async function sendToCall(){
   // Set Result to "Desk Only"
   const resultKey=Object.keys(r).find(k=>k.toLowerCase()==='result')||'Result';
   records[currentIdx][resultKey]='Desk Only';
+  const fc=gel('editFormContent');
   if(fc){fc.querySelectorAll('[data-field]').forEach(el=>{if(el.dataset.field.toLowerCase().replace(/[_\s]/g,'')==='result')el.value='Desk Only';});}
 
   // Save the record with Desk Only result
@@ -2317,7 +2325,7 @@ function checkMinFields(r){
   if(!liveVal(['add1','ADD1','Add1']))missing.push('Address 1');
   if(!liveVal(['Town','TOWN','town']))missing.push('Town');
   if(!liveVal(['website','WEBSITE','Website']))missing.push('Website');
-  if(!liveVal(['Co_Phone','PHONE','Phone','Phone_1','Co Phone']))missing.push('Phone');
+  if(!liveVal(['Co_Phone','PHONE','Phone','Phone_1','Co Phone','HEAD OFFICE TEL NO','HEADOFFICETELNO','HEAD_OFFICE_TEL_NO','Co_Phone','Co Phone']))missing.push('Phone');
   return missing;
 }
 let _toCallPromptShown=false;
@@ -2350,13 +2358,12 @@ async function saveRec(){
   const _intEl=gel('editFormContent')?.querySelector('[data-field="'+_intKey+'"]');
   if(_intEl)_intEl.value=r[_intKey];
 
-  // Strip Office/Employees dropdown values to just the letter code before saving
-  // Also replace any (no) values with empty string
+  // Replace any (no) values with empty string
+  Object.keys(r).forEach(k=>{if(typeof r[k]==='string'&&r[k]==='(no)')r[k]='';});
+  // Strip Office/Employees dropdown values to just the letter code (only these specific fields)
+  const _labelFields=['office','co_employees','coemployees','siteemployees'];
   Object.keys(r).forEach(k=>{
-    if(typeof r[k]==='string'){
-      if(r[k]==='(no)')r[k]='';
-      if(r[k].match(/^[A-Z]\s*:/))r[k]=r[k].charAt(0);
-    }
+    if(typeof r[k]==='string'&&r[k].match(/^[A-Z]\s*:/)&&_labelFields.includes(k.toLowerCase().replace(/[_\s]/g,'')))r[k]=r[k].charAt(0);
   });
 
   // Build payload — send direct columns individually AND overflow into JSONB data
@@ -2386,6 +2393,8 @@ async function saveRec(){
   });
 
   // 4. Everything also goes into data JSONB for compatibility
+  // Sanitise (no) from dataPayload as well
+  Object.keys(dataPayload).forEach(k=>{if(dataPayload[k]==='(no)')dataPayload[k]='';});
   payload.data=dataPayload;
 
   const{error}=await sb.from('records').update(payload).eq('id',r.id);
@@ -2639,7 +2648,9 @@ async function deleteList(status){
   const ids=records.filter(r=>r._status===status).map(r=>r.id).filter(Boolean);
   const{error}=await sb.from('records').delete().in('id',ids);
   if(error){showToast('Delete failed: '+error.message,'error');return;}
-  records=records.filter(r=>r._status!==status);
+  // Re-fetch records from DB to ensure local state matches
+  const{data:freshRecs}=await sb.from('records').select('*').eq('project_id',currentProject.id).order('original_order',{ascending:true});
+  if(freshRecs)records=freshRecs.map(mergeRecord);
   updateCounts();reRender();
   showToast('Deleted '+count+' '+label+' records','done');
 }
@@ -2889,37 +2900,6 @@ function autoSuggestField(colName){
     'lastupdated':'Last_up','lastup':'Last_up','last_up':'Last_up','updatedate':'Last_up',
     'datevalidated':'Date_val','date_val':'Date_val',
     'result':'Result','outcome':'Result','callresult':'Result',
-    'sbref':'suref','wbref':'suref','refno':'suref',
-    'coname':'Company','companyname':'Company','name':'Company',
-    'alsoknownas':'aka','tradingname':'aka',
-    'companynumber':'Company_Number','regno':'Company_Number','registrationnumber':'Company_Number',
-    'address1':'add1','addr1':'add1','street':'add1',
-    'address2':'add2','addr2':'add2',
-    'address3':'add3','addr3':'add3',
-    'address4':'add4','addr4':'add4',
-    'city':'Town','towncity':'Town','townorc ity':'Town',
-    'county':'Cty','cty':'Cty',
-    'postcode':'Postcode','postalcode':'Postcode','zip':'Postcode',
-    'headofficetelno':'Co_Phone','mainphone':'Co_Phone','tel':'Co_Phone','telephone':'Co_Phone',
-    'mobile':'MPHONE','mobilephone':'MPHONE','mob':'MPHONE',
-    'contactemail':'Co_E-mail','email':'Co_E-mail','companyemail':'Co_E-mail',
-    'colinkedin':'Company_LinkedIn','linkedin':'Company_LinkedIn',
-    'title':'Title_1','firstname':'Firstn_1','forename':'Firstn_1','surname':'Surname_1','lastname':'Surname_1',
-    'position':'Position_1','jobtitle':'Position_1',
-    'phone1':'Phone_1','tel1':'Phone_1','directphone':'Phone_1',
-    'email1':'E-Mail_1',
-    'linkedin1':'LinkedIn_1',
-    'title2':'Title_2','firstname2':'Firstn_2','forename2':'Firstn_2','surname2':'Surname_2',
-    'position2':'Position_2','phone2':'Phone_2','email2':'E-Mail_2','linkedin2':'LinkedIn_2',
-    'title3':'Title_3','firstname3':'Firstn_3','forename3':'Firstn_3','surname3':'Surname_3',
-    'position3':'Position_3','phone3':'Phone_3','email3':'E-Mail_3','linkedin3':'LinkedIn_3',
-    'notes':'Notes','note':'Notes',
-    'privatenotes':'Private_Notes','internalnotes':'Private_Notes',
-    'researcher':'Researcher','researchedby':'Researcher',
-    'lastupdated':'Last_up','lastup':'Last_up','updatedate':'Last_up',
-    'datevalidated':'Date_val','validateddate':'Date_val',
-    'result':'Result','outcome':'Result','callresult':'Result',
-    'headoffice':'Office','officetype':'Office',
     'siteemployees':'Site_Employee','noofstaff':'Co_Employees','employees':'Co_Employees',
     'firstname1':'Firstn_1','surname1':'Surname_1',
     'firstn1':'Firstn_1','firstn2':'Firstn_2','firstn3':'Firstn_3',
@@ -3142,7 +3122,7 @@ function toCSV(data){
   return[headers.map(e2).join(','),...data.map(r=>fields.map(f=>e2(bestVal(r,f))).join(','))].join('\n');
 }
 async function exportList(type){
-  if(!isSuperuser){showToast('Export is restricted to superusers','error');return;}
+  if(!hasPermission('can_export')){showToast('You do not have export permission','error');return;}
   let data,fn;const n=(currentProject?.name||'project').replace(/[^a-z0-9]/gi,'-').toLowerCase();
   if(type==='Ready'){data=records.filter(r=>r._status==='Ready');fn=n+'-ready.csv';}
   else if(type==='Callback'){data=records.filter(r=>r._status==='Callback');fn=n+'-callbacks.csv';}
@@ -3485,7 +3465,6 @@ async function openPermissions(email,name){
   gel('permsUserLabel').textContent=name+' ('+email+')';
   // Fetch current permissions for this user — try permissions column, tolerate if missing
   const{data,error}=await sb.from('user_roles').select('*').eq('user_email',email).single();
-  console.log('Permissions fetch for',email,':',data,error);
   const perms=data&&Array.isArray(data.permissions)?data.permissions:[];
   gel('permCanExport').checked=perms.includes('can_export');
   openModal('permsModal');
@@ -3496,7 +3475,6 @@ async function savePermissions(){
   if(gel('permCanExport').checked)perms.push('can_export');
   // Upsert — handles both existing rows and missing rows
   const{error}=await sb.from('user_roles').upsert({user_email:_permsEmail,permissions:perms},{onConflict:'user_email'});
-  console.log('Permissions save for',_permsEmail,':',perms,'error:',error);
   if(error){showToast('Failed to save permissions: '+error.message,'error');return;}
   closeModal('permsModal');
   showToast('Permissions updated for '+_permsEmail,'done');
@@ -3541,7 +3519,7 @@ async function endImpersonation(){
   currentUserPermissions=[..._realPerms];
   _realRole=null;_realPerms=null;
   // Restore real user label
-  gel('userLabel').textContent=currentUser.email.split('@')[0];
+  gel('userLabel').textContent=getUserDisplayName().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
   // Hide banner and restore header
   const banner=gel('impersonateBanner');if(banner)banner.style.display='none';
   document.querySelector('header').style.marginTop='';
@@ -4023,7 +4001,13 @@ function emailTemplateChanged(){
 }
 
 function updateEmailPreview(){
-  gel('emailPreview').innerHTML=gel('emailBody').value;
+  // Render in sandboxed iframe to prevent XSS from email body HTML
+  const _ep=gel('emailPreview');
+  let _iframe=_ep.querySelector('iframe');
+  if(!_iframe){_iframe=document.createElement('iframe');_iframe.sandbox='allow-same-origin';_iframe.style.cssText='width:100%;border:none;min-height:200px;';_ep.innerHTML='';_ep.appendChild(_iframe);}
+  const _doc=_iframe.contentDocument||_iframe.contentWindow.document;
+  _doc.open();_doc.write('<html><body style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.6;">'+gel('emailBody').value+'</body></html>');_doc.close();
+  _iframe.style.height=(_doc.body.scrollHeight+20)+'px';
 }
 // Live preview update
 document.addEventListener('input',e=>{if(e.target.id==='emailBody')updateEmailPreview();});
@@ -4397,7 +4381,6 @@ function csCopyField(btn,fieldNames,value){
 }
 
 function csCopyDirector(btn,title,firstName,surname){
-  console.log('csCopyDirector:',{title,firstName,surname});
   if(currentIdx<0||!records[currentIdx])return;
   const r=records[currentIdx];const fc=gel('editFormContent');
   // Find next empty contact slot — all three of title, firstname, surname must be empty
@@ -4414,7 +4397,6 @@ function csCopyDirector(btn,title,firstName,surname){
     }
     if(!tVal&&!fnVal&&!snVal){slot=n;break;}
   }
-  console.log('csCopyDirector: slot=',slot);
   if(!slot){showToast('All 3 contact slots are filled — clear one first','error');return;}
   if(title)csSetField(['Title_'+slot,'Title '+slot,'Title'+slot],title);
   csSetField(['Firstn_'+slot,'Firstn '+slot,'Firstn'+slot],firstName);
@@ -4606,14 +4588,13 @@ async function deleteTemplate(id,name){
   renderTemplateList();
 }
 
-document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;if(e.key==='Escape')cancelEdit();});
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;if(e.key==='Escape'&&currentIdx>=0)cancelEdit();});
 window.addEventListener('beforeunload',()=>{if(currentIdx>=0&&records[currentIdx]?.id){const rid=records[currentIdx].id;const l=locks[rid];if(l&&l.user_email===currentUser?.email){
   // keepalive ensures the request completes even as the page closes
-  fetch(SB_URL+'/rest/v1/locks?record_id=eq.'+encodeURIComponent(rid),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},keepalive:true});
+  fetch(SB_URL+'/rest/v1/locks?record_id=eq.'+encodeURIComponent(rid),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+(_cachedSessionToken||SB_KEY)},keepalive:true});
 }}});
 
 init();
 </script>
 </body>
 </html>
-<!-- deployed 20260414202552 -->
