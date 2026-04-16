@@ -4071,7 +4071,7 @@ function renderActivity(){
         ${recent.map(a=>{
           const d=new Date(a.created_at);
           const time=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-          const actionCls=a.action==='Done'?'color:var(--done)':a.action==='Callback'?'color:var(--cb)':'';
+          const actionCls=a.action==='Done'?'color:var(--done)':a.action==='Callback'?'color:var(--cb)':a.action==='Email sent'?'color:var(--teal)':'';
           return`<tr>
             <td style="white-space:nowrap;font-size:12px;color:var(--muted);">${time}</td>
             <td>${esc(a.user_name||a.user_email.split('@')[0])}</td>
@@ -4256,6 +4256,10 @@ async function doSendEmail(){
       const existing=(r[pnF]||getFieldVal(r,pnF)||'').trim();
       r[pnF]=existing?existing+'\n'+stamp:stamp;
       await saveRec();
+    }
+    // Log to activity dashboard
+    if(_emailRecordIdx>=0&&records[_emailRecordIdx]){
+      await logActivity('Email sent',records[_emailRecordIdx]);
     }
     showToast('Email sent to '+to,'done');
     closeModal('emailModal');
