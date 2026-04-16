@@ -1230,17 +1230,18 @@ function renderDashboard(){
     const famColour=parentFamily?FAMILY_COLOURS[parentFamily]||null:null;
     const headerBg=famColour||'#2a5a3a';
     const cc=document.createElement('div');cc.className='companion-card';cc.onclick=()=>openProject(comp.id);
-    cc.innerHTML=`<div class="pc-header" style="background:${headerBg};padding:12px 18px;">
+    const btnHoverColour=famColour?famColour:'#2a5a3a';
+    cc.innerHTML=`<div class="pc-header" style="background:${headerBg};">
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
       </div>
-      <div class="pc-body" style="padding:12px 18px;flex:1;display:flex;flex-direction:column;">
-        <div class="pc-stats" style="margin-bottom:10px;">
-          <div class="pc-stat"><div class="pc-stat-num" style="font-size:16px;">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
-          <div class="pc-stat"><div class="pc-stat-num o" style="font-size:16px;">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
-          <div class="pc-stat"><div class="pc-stat-num g" style="font-size:16px;">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
+      <div class="pc-body">
+        <div class="pc-stats">
+          <div class="pc-stat"><div class="pc-stat-num">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
+          <div class="pc-stat"><div class="pc-stat-num o">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
+          <div class="pc-stat"><div class="pc-stat-num g">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
         </div>
-        <button class="pc-open-btn" style="background:${headerBg};margin-top:auto;">Open New Records →</button>
+        <button class="pc-open-btn" style="background:${headerBg};" onmouseover="this.style.background='${btnHoverColour}'" onmouseout="this.style.background='${headerBg}'">Open New Records →</button>
       </div>`;
     return cc;
   }
