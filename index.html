@@ -3835,7 +3835,7 @@ function togglePwVis(inputId,btn){
 
 async function logActivity(action, record){
   try{
-    await sb.from('activity_log').insert({
+    const payload={
       user_email: currentUser.email,
       user_name: getUserDisplayName(),
       project_id: currentProject?.id||null,
@@ -3844,7 +3844,11 @@ async function logActivity(action, record){
       record_ref: record.suref||(record.data&&record.data.suref)||'',
       record_company: record.Company||record.company||(record.data&&record.data.Company)||'',
       action: action,
-    });
+    };
+    console.log('logActivity: inserting', action, payload);
+    const{data,error}=await sb.from('activity_log').insert(payload);
+    if(error)console.error('logActivity: insert error', error);
+    else console.log('logActivity: insert OK', data);
   } catch(e){ console.warn('Activity log failed:', e); }
 }
 
@@ -4275,9 +4279,10 @@ async function doSendEmail(){
       await saveRec();
     }
     // Log to activity dashboard
+    console.log('doSendEmail: about to log activity, _emailRecordIdx=',_emailRecordIdx,'record exists=',!!records[_emailRecordIdx]);
     if(_emailRecordIdx>=0&&records[_emailRecordIdx]){
       await logActivity('Email sent',records[_emailRecordIdx]);
-    }
+    } else { console.warn('doSendEmail: skipped logActivity — _emailRecordIdx=',_emailRecordIdx); }
     showToast('Email sent to '+to,'done');
     closeModal('emailModal');
     if(_emailResolve){_emailResolve();_emailResolve=null;}
