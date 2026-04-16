@@ -1102,19 +1102,19 @@ async function goToCRM(){
 async function loadProjects(){
   const[statsR,pinR]=await Promise.all([
     sb.from('project_stats').select('*').order('name'),
-    sb.from('projects').select('id,is_pinned,created_by,database_family')
+    sb.from('projects').select('id,is_pinned,is_priority,created_by,database_family')
   ]);
   // linked_to and brief may not exist yet — fetch separately and tolerate failure
   let linkR={data:null};try{linkR=await sb.from('projects').select('id,linked_to');}catch(e){console.warn('linked_to column not available:',e.message);}
   let briefR={data:null};try{briefR=await sb.from('projects').select('id,brief');}catch(e){console.warn('brief column not available:',e.message);}
   const extraMap={};
-  (pinR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),is_pinned:!!p.is_pinned,created_by:p.created_by||'',database_family:p.database_family||null};});
+  (pinR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),is_pinned:!!p.is_pinned,is_priority:!!p.is_priority,created_by:p.created_by||'',database_family:p.database_family||null};});
   (linkR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),linked_to:p.linked_to||null};});
   (briefR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),brief:p.brief||''};});
-  projects=(statsR.data||[]).map(p=>({...p,...(extraMap[p.id]||{is_pinned:false,linked_to:null,brief:'',created_by:'',database_family:null})}));
+  projects=(statsR.data||[]).map(p=>({...p,...(extraMap[p.id]||{is_pinned:false,is_priority:false,linked_to:null,brief:'',created_by:'',database_family:null})}));
   // Filter out temporary (non-pinned) projects with zero records across all tabs
   projects=projects.filter(p=>{
-    if(p.is_pinned)return true;
+    if(p.is_pinned||p.is_priority)return true;
     const total=(p.ready_count||0)+(p.callback_count||0)+(p.done_count||0);
     return total>0;
   });
@@ -1159,6 +1159,24 @@ async function toggleProjectPin(projId,newPinned,e){
     await loadProjects();renderDashboard();
     showToast('Project marked as temporary','done');
   }
+}
+
+async function togglePriority(projId,newPriority,e){
+  e.stopPropagation();
+  if(newPriority){
+    // Clear any existing priority project first
+    const currentPriority=projects.find(p=>p.is_priority&&p.id!==projId);
+    if(currentPriority){
+      await sb.from('projects').update({is_priority:false}).eq('id',currentPriority.id);
+    }
+    const{error}=await sb.from('projects').update({is_priority:true}).eq('id',projId);
+    if(error){showToast('Failed to set priority: '+error.message,'error');return;}
+  } else {
+    const{error}=await sb.from('projects').update({is_priority:false}).eq('id',projId);
+    if(error){showToast('Failed to clear priority: '+error.message,'error');return;}
+  }
+  await loadProjects();renderDashboard();
+  showToast(newPriority?'Priority project set':'Priority cleared','done');
 }
 
 function openFamilySelector(projId,currentFamily,e,mode){
@@ -1229,6 +1247,7 @@ function renderDashboard(){
 
   function makeParentCard(p){
     const isPinned=!!p.is_pinned;
+    const isPriority=!!p.is_priority;
     const famColour=isPinned&&p.database_family?FAMILY_COLOURS[p.database_family]||null:null;
     const famLabel=p.database_family?FAMILY_LABELS[p.database_family]||'':'';
     const headerStyle=famColour?`background:${famColour};`:'';
@@ -1236,7 +1255,8 @@ function renderDashboard(){
     const delBtn=(!isPinned&&isSuperuser)?`<button class="pc-del" onclick="openDeleteProjModal('${p.id}','${esc(p.name)}',event)">✕ Delete</button>`:'';
     const pinToggle=isSuperuser?`<button class="pc-pin" onclick="toggleProjectPin('${p.id}',${isPinned?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPinned?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPinned?'Remove permanent status':'Make permanent'}">${isPinned?'★ Permanent':'☆ Make Permanent'}</button>`:'';
     const changeFamily=isPinned&&isSuperuser?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;">${famLabel||'Set Family'}</button>`:'';
-    c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${changeFamily}${pinToggle}${delBtn}</div></div>
+    const priorityBtn=isSuperuser?`<button onclick="togglePriority('${p.id}',${isPriority?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPriority?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPriority?'Remove priority':'Set as priority'}">${isPriority?'⚡ Priority':'⚡'}</button>`:'';
+    c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${priorityBtn}${changeFamily}${pinToggle}${delBtn}</div></div>
       <div class="pc-body"><div class="pc-stats">
         <div class="pc-stat"><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
         <div class="pc-stat"><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
@@ -1266,8 +1286,9 @@ function renderDashboard(){
     return cc;
   }
 
-  const pinnedParents=parents.filter(p=>p.is_pinned);
-  const regularParents=parents.filter(p=>!p.is_pinned);
+  const priorityParent=parents.find(p=>p.is_priority);
+  const pinnedParents=parents.filter(p=>p.is_pinned&&!p.is_priority);
+  const regularParents=parents.filter(p=>!p.is_pinned&&!p.is_priority);
 
   function appendProjectRows(list){
     list.forEach(p=>{
@@ -1278,10 +1299,18 @@ function renderDashboard(){
     });
   }
 
-  // Pinned projects first
+  // Priority project at the very top
+  if(priorityParent){
+    const sl=document.createElement('div');sl.className='dash-section-label';
+    sl.innerHTML='<div style="display:flex;align-items:center;gap:8px;color:#f59e0b;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:8px 14px;">⚡ Priority Project</div>';
+    grid.appendChild(sl);
+    appendProjectRows([priorityParent]);
+  }
+
+  // Pinned projects
   if(pinnedParents.length){
     const sl=document.createElement('div');sl.className='dash-section-label';
-    sl.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;"><span>Permanent Research Projects</span><span>New Records</span></div>';
+    sl.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;'+(priorityParent?'margin-top:8px;':'')+'"><span>Permanent Research Projects</span><span>New Records</span></div>';
     grid.appendChild(sl);
     appendProjectRows(pinnedParents);
   }
@@ -1289,7 +1318,7 @@ function renderDashboard(){
   // Regular projects
   const orphans=projects.filter(p=>p.name.endsWith(' — New Records')&&!parents.find(par=>p.name===par.name+' — New Records'));
   if(regularParents.length||orphans.length){
-    if(pinnedParents.length){
+    if(pinnedParents.length||priorityParent){
       const sl=document.createElement('div');sl.className='dash-section-label';sl.style.marginTop='16px';sl.textContent='Temporary Research Projects';
       grid.appendChild(sl);
     }
