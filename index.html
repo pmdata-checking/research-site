@@ -644,7 +644,8 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <h3>New Project</h3>
     <div class="modal-sub">Give this research project a name. You can import a CSV or add records manually afterwards.</div>
     <div class="modal-field"><div class="modal-label">Project Name</div><input class="modal-input" type="text" id="newProjName" placeholder="e.g. Sealed Unit Manufacturers" onkeydown="if(event.key==='Enter')createProject()"></div>
-    <div class="modal-field" id="newProjPinnedWrap" style="display:none;"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="newProjPinned" style="width:16px;height:16px;"> This is a permanent project (always visible on dashboard even when empty)</label></div>
+    <div class="modal-field" id="newProjPinnedWrap" style="display:none;"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="newProjPinned" style="width:16px;height:16px;" onchange="gel('newProjFamilyWrap').style.display=this.checked?'':'none'"> This is a permanent project (always visible on dashboard even when empty)</label></div>
+    <div class="modal-field" id="newProjFamilyWrap" style="display:none;"><div class="modal-label">Database Family</div><select class="modal-input" id="newProjFamily"><option value="">None / Independent</option><option value="windowbase">windowBASE</option><option value="stockistbase">stockistBASE</option><option value="rooflinebase">rooflineBASE</option><option value="specifiersbase">specifiersBASE</option><option value="builderbase">builder+improverBASE</option></select></div>
     <div class="modal-actions">
       <button class="mbtn mbtn-primary" onclick="createProject()">Create Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('newProjModal')">Cancel</button>
@@ -661,6 +662,28 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div class="modal-actions">
       <button class="mbtn mbtn-danger" onclick="confirmDeleteProject()">Delete Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('deleteProjModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- DATABASE FAMILY SELECTOR MODAL -->
+<div class="modal-overlay" id="familyModal">
+  <div class="modal" style="width:400px;">
+    <h3 id="familyModalTitle">Select Database Family</h3>
+    <div class="modal-sub">Which database family does this project belong to?</div>
+    <div class="modal-field">
+      <select class="modal-input" id="familySelect" style="font-size:14px;padding:10px;">
+        <option value="">None / Independent</option>
+        <option value="windowbase">windowBASE</option>
+        <option value="stockistbase">stockistBASE</option>
+        <option value="rooflinebase">rooflineBASE</option>
+        <option value="specifiersbase">specifiersBASE</option>
+        <option value="builderbase">builder+improverBASE</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" id="familyConfirmBtn" onclick="confirmFamilySelection()">Confirm</button>
+      <button class="mbtn mbtn-cancel" onclick="cancelFamilySelection()">Cancel</button>
     </div>
   </div>
 </div>
@@ -906,6 +929,8 @@ const RESULT_OPT=[
 
 const KNOWN={suref:'Windowbase Ref',Company:'Company',Company_Number:'Company Number',aka:'Also Known As',add1:'Address 1',add2:'Address 2',add3:'Address 3',add4:'Address 4',Town:'Town or City',Cty:'County',Postcode:'Postcode',Country:'Country',region:'Region',Co_Phone:'Phone',MPHONE:'MPhone','Co_E-mail':'Email',Company_LinkedIn:'Company LinkedIn',website:'Website',Co_Fax:'Fax',Office:'Office',Co_Employees:'No. of Employees',Onsite_activity:'Onsite Activity',Private_Notes:'Private Notes',Notes:'Notes',Title_1:'Title',Firstn_1:'First Name',Surname_1:'Surname',Position_1:'Position',Phone_1:'Phone','E-Mail_1':'Email',LinkedIn_1:'LinkedIn',Title_2:'Title',Firstn_2:'First Name',Surname_2:'Surname',Position_2:'Position',Phone_2:'Phone','E-Mail_2':'Email',LinkedIn_2:'LinkedIn',Title_3:'Title',Firstn_3:'First Name',Surname_3:'Surname',Position_3:'Position',Phone_3:'Phone','E-Mail_3':'Email',LinkedIn_3:'LinkedIn',Researcher:'Researcher',Last_up:'Last Updated',Date_val:'Date Validated',Result:'Result',su_qty:'Quantity',su_range:'Range',Spacer_bar_brand:'Spacer Bar Brand',spacer_bar_tech:'Spacer Bar Tech',Products_made:'Products Made',Site_Employee:'Site Employees',Machinery_used:'Machinery Used',Parent_Company:'Parent Company',wdc_wbref:'WDC Ref',BRANCH_NO:'Branch No',Branch_No:'Branch No'};
 const SKIP=new Set(['id','_status','original_order','created_at','updated_at','project_id','is_new_record','Expr1023','expr1023']);
+const FAMILY_COLOURS={'windowbase':'#29a9e1','stockistbase':'#8b1a4a','rooflinebase':'#cc2222','specifiersbase':'#d4611a','builderbase':'#6b6b2a'};
+const FAMILY_LABELS={'windowbase':'windowBASE','stockistbase':'stockistBASE','rooflinebase':'rooflineBASE','specifiersbase':'specifiersBASE','builderbase':'builder+improverBASE'};
 const WDC_RTK_OPT=['#','K','NB','R','SH','T'];
 const WDC_RTK_LABELS={'#':"Don't know",'K':'Commercial','NB':'New Build','R':'Retail','SH':'Social Housing','T':'Trade'};
 const WDC_ALU_SYSTEMS=['AluK','Comar','Cortizo','Jack Aluminium','Kawneer','Kestrel','Metal Technology','Origin','Own System','REAL Aluminium','Reynaers','Sapa','Schuco','Senior Architectural Systems','Sheerline','Smart','Stayfix','Technal','Varies','Warmcore','#'];
@@ -1057,16 +1082,16 @@ async function doLogout(){await releaseLock(currentIdx);clearInterval(lockHB);cl
 async function loadProjects(){
   const[statsR,pinR]=await Promise.all([
     sb.from('project_stats').select('*').order('name'),
-    sb.from('projects').select('id,is_pinned,created_by')
+    sb.from('projects').select('id,is_pinned,created_by,database_family')
   ]);
   // linked_to and brief may not exist yet — fetch separately and tolerate failure
   let linkR={data:null};try{linkR=await sb.from('projects').select('id,linked_to');}catch(e){console.warn('linked_to column not available:',e.message);}
   let briefR={data:null};try{briefR=await sb.from('projects').select('id,brief');}catch(e){console.warn('brief column not available:',e.message);}
   const extraMap={};
-  (pinR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),is_pinned:!!p.is_pinned,created_by:p.created_by||''};});
+  (pinR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),is_pinned:!!p.is_pinned,created_by:p.created_by||'',database_family:p.database_family||null};});
   (linkR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),linked_to:p.linked_to||null};});
   (briefR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),brief:p.brief||''};});
-  projects=(statsR.data||[]).map(p=>({...p,...(extraMap[p.id]||{is_pinned:false,linked_to:null,brief:'',created_by:''})}));
+  projects=(statsR.data||[]).map(p=>({...p,...(extraMap[p.id]||{is_pinned:false,linked_to:null,brief:'',created_by:'',database_family:null})}));
   // Filter out temporary (non-pinned) projects with zero records across all tabs
   projects=projects.filter(p=>{
     if(p.is_pinned)return true;
@@ -1078,7 +1103,8 @@ async function loadProjects(){
 async function createProject(){
   const name=val('newProjName').trim();if(!name){alert('Enter a project name.');return;}
   const pinned=!!(gel('newProjPinned')&&gel('newProjPinned').checked);
-  const{data,error}=await sb.from('projects').insert({name,fields:'[]',created_by:currentUser.email,is_pinned:pinned}).select().single();
+  const family=pinned?(gel('newProjFamily')?.value||null):null;
+  const{data,error}=await sb.from('projects').insert({name,fields:'[]',created_by:currentUser.email,is_pinned:pinned,database_family:family||null}).select().single();
   if(error){showToast('Error: '+error.message,'error');return;}
   closeModal('newProjModal');gel('newProjName').value='';
   await loadProjects();renderDashboard();openProject(data.id);
@@ -1099,12 +1125,45 @@ async function confirmDeleteProject(){
   await loadProjects();renderDashboard();showToast('Project deleted','info');
 }
 
+let _familyPendingAction=null; // {type:'pin'|'change', projId, resolve, reject}
+
 async function toggleProjectPin(projId,newPinned,e){
   e.stopPropagation();
-  const{error}=await sb.from('projects').update({is_pinned:newPinned}).eq('id',projId);
+  if(newPinned){
+    // Show family selector before pinning
+    openFamilySelector(projId,'',null,'pin');
+  } else {
+    // Unpinning — clear family and unpin
+    const{error}=await sb.from('projects').update({is_pinned:false,database_family:null}).eq('id',projId);
+    if(error){showToast('Failed to update: '+error.message,'error');return;}
+    await loadProjects();renderDashboard();
+    showToast('Project marked as temporary','done');
+  }
+}
+
+function openFamilySelector(projId,currentFamily,e,mode){
+  if(e)e.stopPropagation();
+  _familyPendingAction={type:mode||'change',projId};
+  gel('familyModalTitle').textContent=mode==='pin'?'Select Database Family':'Change Database Family';
+  gel('familySelect').value=currentFamily||'';
+  openModal('familyModal');
+}
+
+async function confirmFamilySelection(){
+  if(!_familyPendingAction)return;
+  const{type,projId}=_familyPendingAction;
+  const family=gel('familySelect').value||null;
+  let updateObj={database_family:family};
+  if(type==='pin')updateObj.is_pinned=true;
+  const{error}=await sb.from('projects').update(updateObj).eq('id',projId);
   if(error){showToast('Failed to update: '+error.message,'error');return;}
+  closeModal('familyModal');_familyPendingAction=null;
   await loadProjects();renderDashboard();
-  showToast(newPinned?'Project marked as permanent':'Project marked as temporary','done');
+  showToast(type==='pin'?'Project marked as permanent':'Database family updated','done');
+}
+
+function cancelFamilySelection(){
+  closeModal('familyModal');_familyPendingAction=null;
 }
 
 function openLinkProjModal(){
@@ -1150,10 +1209,14 @@ function renderDashboard(){
 
   function makeParentCard(p){
     const isPinned=!!p.is_pinned;
+    const famColour=isPinned&&p.database_family?FAMILY_COLOURS[p.database_family]||null:null;
+    const famLabel=p.database_family?FAMILY_LABELS[p.database_family]||'':'';
+    const headerStyle=famColour?`background:${famColour};`:'';
     const c=document.createElement('div');c.className='project-card'+(isPinned?' pinned-card':'');c.onclick=()=>openProject(p.id);
     const delBtn=(!isPinned&&isSuperuser)?`<button class="pc-del" onclick="openDeleteProjModal('${p.id}','${esc(p.name)}',event)">✕ Delete</button>`:'';
     const pinToggle=isSuperuser?`<button class="pc-pin" onclick="toggleProjectPin('${p.id}',${isPinned?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPinned?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPinned?'Remove permanent status':'Make permanent'}">${isPinned?'★ Permanent':'☆ Make Permanent'}</button>`:'';
-    c.innerHTML=`<div class="pc-header"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${pinToggle}${delBtn}</div></div>
+    const changeFamily=isPinned&&isSuperuser?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;">${famLabel||'Set Family'}</button>`:'';
+    c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${changeFamily}${pinToggle}${delBtn}</div></div>
       <div class="pc-body"><div class="pc-stats">
         <div class="pc-stat"><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
         <div class="pc-stat"><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
@@ -3395,6 +3458,8 @@ function openModal(id){
   if(id==='newProjModal'){
     const pw=gel('newProjPinnedWrap');if(pw)pw.style.display=isSuperuser?'':'none';
     const pc=gel('newProjPinned');if(pc)pc.checked=false;
+    const fw=gel('newProjFamilyWrap');if(fw)fw.style.display='none';
+    const fs=gel('newProjFamily');if(fs)fs.value='';
   }
   if(id==='newUserModal'){
     const btn=gel('nuBtn');
