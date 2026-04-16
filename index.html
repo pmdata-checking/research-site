@@ -3318,19 +3318,36 @@ function deriveProjectCode(name){
 
 function renderDbTemplateList(){
   const cont=gel('dbTemplatesContent');
-  if(!projects.length){cont.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">No projects found.</div>';return;}
-  const rows=projects.map(p=>{
-    const code=deriveProjectCode(p.name);
-    const done=p.done_count||0;
-    const cb=p.callback_count||0;
-    return`<tr>
-      <td><strong>${esc(p.name)}</strong></td>
-      <td style="font-size:12px;color:var(--muted);font-family:monospace;">${esc(code)}</td>
-      <td style="font-size:12px;text-align:center;"><span style="color:var(--done);">${done}</span> Done / <span style="color:var(--cb);">${cb}</span> Callback</td>
-      <td style="text-align:right;"><button class="user-action-btn" onclick="previewDbTemplate('${p.id}')">Preview Test Sheet</button></td>
-    </tr>`;
-  }).join('');
-  cont.innerHTML=`<table class="act-table"><thead><tr><th>Project</th><th>Code</th><th style="text-align:center;">Records</th><th style="width:160px;"></th></tr></thead><tbody>${rows}</tbody></table>`;
+  // Filter out companion "New Records" projects
+  const dbProjects=projects.filter(p=>!p.name.includes('New Records')&&!p.name.startsWith('—'));
+  if(!dbProjects.length){cont.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">No projects found.</div>';return;}
+
+  const permanent=dbProjects.filter(p=>p.is_pinned);
+  const temporary=dbProjects.filter(p=>!p.is_pinned);
+
+  function makeTable(list){
+    const rows=list.map(p=>{
+      const code=deriveProjectCode(p.name);
+      const done=p.done_count||0;
+      const cb=p.callback_count||0;
+      return`<tr>
+        <td><strong>${esc(p.name)}</strong></td>
+        <td style="font-size:12px;color:var(--muted);font-family:monospace;">${esc(code)}</td>
+        <td style="font-size:12px;text-align:center;"><span style="color:var(--done);">${done}</span> Done / <span style="color:var(--cb);">${cb}</span> Callback</td>
+        <td style="text-align:right;"><button class="user-action-btn" onclick="previewDbTemplate('${p.id}')">Preview Test Sheet</button></td>
+      </tr>`;
+    }).join('');
+    return`<table class="act-table"><thead><tr><th>Project</th><th>Code</th><th style="text-align:center;">Records</th><th style="width:160px;"></th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  let html='';
+  if(permanent.length){
+    html+=`<div style="font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:8px;">Permanent Projects</div>`+makeTable(permanent);
+  }
+  if(temporary.length){
+    html+=`<div style="font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.5);margin:${permanent.length?'16':'0'}px 0 8px;">Temporary Projects</div>`+makeTable(temporary);
+  }
+  cont.innerHTML=html;
 }
 
 async function previewDbTemplate(projId){
@@ -3347,7 +3364,7 @@ async function previewDbTemplate(projId){
 
   // Build preview table
   gel('dbTplPreviewTitle').textContent='Test Sheet Preview — '+proj.name;
-  const thRow=d.headers.map(h=>'<th style="white-space:nowrap;padding:6px 10px;font-size:11px;background:rgba(255,255,255,.1);">'+esc(h)+'</th>').join('');
+  const thRow=d.headers.map(h=>'<th style="white-space:nowrap;padding:6px 10px;font-size:11px;background:var(--navy);position:sticky;top:0;z-index:1;">'+esc(h)+'</th>').join('');
   const bodyRows=d.rows.map(r=>'<tr>'+d.fields.map(f=>'<td style="white-space:nowrap;padding:4px 10px;font-size:11px;">'+esc(String(r[f]||''))+'</td>').join('')+'</tr>').join('');
   gel('dbTplPreviewTable').innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--cb);margin-bottom:8px;">*** TEST FILE — NOT REAL DATA ***</div>
     <div style="overflow-x:auto;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">
