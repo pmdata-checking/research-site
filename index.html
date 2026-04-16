@@ -1225,9 +1225,12 @@ function renderDashboard(){
     return c;
   }
 
-  function makeCompanionCard(comp){
+  function makeCompanionCard(comp,parentProj){
+    const parentFamily=parentProj?.database_family||null;
+    const famColour=parentFamily?FAMILY_COLOURS[parentFamily]||null:null;
+    const headerBg=famColour||'#2a5a3a';
     const cc=document.createElement('div');cc.className='companion-card';cc.onclick=()=>openProject(comp.id);
-    cc.innerHTML=`<div class="pc-header" style="background:#2a5a3a;padding:12px 18px;">
+    cc.innerHTML=`<div class="pc-header" style="background:${headerBg};padding:12px 18px;">
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
       </div>
@@ -1237,7 +1240,7 @@ function renderDashboard(){
           <div class="pc-stat"><div class="pc-stat-num o" style="font-size:16px;">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
           <div class="pc-stat"><div class="pc-stat-num g" style="font-size:16px;">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
         </div>
-        <button class="pc-open-btn" style="background:#2a5a3a;">Open New Records →</button>
+        <button class="pc-open-btn" style="background:${headerBg};">Open New Records →</button>
       </div>`;
     return cc;
   }
@@ -1250,7 +1253,7 @@ function renderDashboard(){
       const row=document.createElement('div');row.className='dash-row';
       row.appendChild(makeParentCard(p));
       const comp=companionMap[p.name];
-      if(comp)row.appendChild(makeCompanionCard(comp));
+      if(comp)row.appendChild(makeCompanionCard(comp,p));
       grid.appendChild(row);
     });
   }
