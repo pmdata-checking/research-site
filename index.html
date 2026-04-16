@@ -3887,6 +3887,9 @@ async function loadActivityData(){
   const{data,error}=await sb.from('activity_log').select('*').order('created_at',{ascending:false}).limit(1000);
   if(error){gel('activityContent').innerHTML='<div class="act-loading">Error loading activity.</div>';return;}
   activityData=data||[];
+  console.log('loadActivityData: raw results count=',activityData.length,'actions=',JSON.stringify([...new Set(activityData.map(a=>a.action))]));
+  const emailRows=activityData.filter(a=>a.action==='Email sent');
+  console.log('loadActivityData: Email sent rows=',emailRows.length,emailRows.slice(0,3));
   renderActivity();
 }
 
@@ -3923,6 +3926,7 @@ function renderActivity(){
   }
   if(projectFilter!=='all')filtered=filtered.filter(a=>a.project_id===projectFilter);
   if(researcherFilter!=='all')filtered=filtered.filter(a=>a.user_email===researcherFilter);
+  console.log('renderActivity: period=',period,'projectFilter=',projectFilter,'researcherFilter=',researcherFilter,'filtered count=',filtered.length,'Email sent in filtered=',filtered.filter(a=>a.action==='Email sent').length);
 
   // Populate researcher dropdown (preserve selection)
   const resSel=gel('actResearcher');const curRes=resSel.value;
