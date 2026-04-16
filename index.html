@@ -424,6 +424,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <button class="tb-btn" onclick="document.getElementById('cbSearch').value='';renderCB()">✕</button>
           <div class="tb-spacer"></div>
           <button class="tb-btn" onclick="exportList('Callback')">↓ Export Callbacks</button>
+          <button class="tb-btn" id="testExportCbBtn" style="display:none;" onclick="exportTestSheet()">↓ Export Test Sheet</button>
           <button class="tb-btn" id="deleteCbBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="deleteList('Callback')">🗑 Delete Entire List</button>
         </div>
         <div class="list-scroll"><table class="list-table"><thead><tr id="cbHead"></tr></thead><tbody id="cbBody"></tbody></table></div>
@@ -436,6 +437,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <button class="tb-btn" onclick="document.getElementById('dnSearch').value='';renderDone()">✕</button>
           <div class="tb-spacer"></div>
           <button class="tb-btn" onclick="exportList('Done')">↓ Export List</button>
+          <button class="tb-btn" id="testExportDnBtn" style="display:none;" onclick="exportTestSheet()">↓ Export Test Sheet</button>
           <button class="tb-btn" id="deleteDnBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="deleteList('Done')">🗑 Delete Entire List</button>
         </div>
         <div class="list-scroll"><table class="list-table"><thead><tr id="dnHead"></tr></thead><tbody id="dnBody"></tbody></table></div>
@@ -508,6 +510,10 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       </div>
       <div class="dash-scroll">
         <div id="templatesContent" style="max-width:1000px;margin:0 auto;"></div>
+        <div id="dbTemplatesSection" style="max-width:1000px;margin:24px auto 0;display:none;">
+          <div style="font-size:15px;font-weight:700;letter-spacing:.05em;margin-bottom:12px;color:rgba(255,255,255,.9);">Database Templates</div>
+          <div id="dbTemplatesContent"></div>
+        </div>
       </div>
     </div>
 
@@ -545,6 +551,18 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 
   </div><!-- end .main -->
 </div><!-- end #app -->
+
+<!-- DATABASE TEMPLATE PREVIEW MODAL -->
+<div class="modal-overlay" id="dbTplPreviewModal">
+  <div class="modal" style="width:95vw;max-width:1200px;max-height:90vh;overflow-y:auto;">
+    <h3 id="dbTplPreviewTitle">Test Sheet Preview</h3>
+    <div id="dbTplPreviewTable" style="overflow-x:auto;margin-bottom:16px;"></div>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" id="dbTplDownloadBtn">↓ Download XLSX</button>
+      <button class="mbtn mbtn-cancel" onclick="closeModal('dbTplPreviewModal')">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- LINK PROJECTS MODAL -->
 <div class="modal-overlay" id="linkProjModal">
@@ -768,6 +786,9 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div id="permsList" style="margin-bottom:16px;">
       <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;cursor:pointer;">
         <input type="checkbox" id="permCanExport" style="width:16px;height:16px;"> Can Export — allows downloading CSV exports
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="permCanGenTemplate" style="width:16px;height:16px;"> Can Generate Database Templates — access to Database Templates section
       </label>
     </div>
     <div class="modal-actions">
@@ -1045,6 +1066,12 @@ async function loadProjects(){
   (linkR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),linked_to:p.linked_to||null};});
   (briefR.data||[]).forEach(p=>{extraMap[p.id]={...(extraMap[p.id]||{}),brief:p.brief||''};});
   projects=(statsR.data||[]).map(p=>({...p,...(extraMap[p.id]||{is_pinned:false,linked_to:null,brief:'',created_by:''})}));
+  // Filter out temporary (non-pinned) projects with zero records across all tabs
+  projects=projects.filter(p=>{
+    if(p.is_pinned)return true;
+    const total=(p.ready_count||0)+(p.callback_count||0)+(p.done_count||0);
+    return total>0;
+  });
 }
 
 async function createProject(){
@@ -1166,7 +1193,7 @@ function renderDashboard(){
   const orphans=projects.filter(p=>p.name.endsWith(' — New Records')&&!parents.find(par=>p.name===par.name+' — New Records'));
   if(regularParents.length||orphans.length){
     if(pinnedParents.length){
-      const sl=document.createElement('div');sl.className='dash-section-label';sl.style.marginTop='16px';sl.textContent='Research Projects';
+      const sl=document.createElement('div');sl.className='dash-section-label';sl.style.marginTop='16px';sl.textContent='Temporary Research Projects';
       grid.appendChild(sl);
     }
     appendProjectRows(regularParents);
@@ -1209,6 +1236,8 @@ async function openProject(projId){
   const delQ=gel('deleteQBtn');if(delQ)delQ.style.display=isSuperuser?'inline-block':'none';
   const delCb=gel('deleteCbBtn');if(delCb)delCb.style.display=isSuperuser?'inline-block':'none';
   const delDn=gel('deleteDnBtn');if(delDn)delDn.style.display=isSuperuser?'inline-block':'none';
+  const teCb=gel('testExportCbBtn');if(teCb)teCb.style.display=isSuperuser?'inline-block':'none';
+  const teDn=gel('testExportDnBtn');if(teDn)teDn.style.display=isSuperuser?'inline-block':'none';
   const dupBtn=gel('checkDupBtn');if(dupBtn)dupBtn.style.display=isSuperuser?'inline-block':'none';
   gel('exportModalTitle').textContent='Export — '+currentProject.name;
   // Rename "Ready to Research" tab to "To Call" for New Records companion projects
@@ -3152,6 +3181,188 @@ async function exportList(type){
   closeModal('exportModal');
 }
 
+// Shared test sheet data generator — used by exportTestSheet and Database Templates preview
+function generateTestSheetData(fieldsList,recordsList,projectName){
+  const REF_NAMES=new Set(['suref','wbref','sbref','wdc_wbref']);
+  const EXPORT_RENAME={'co_e-mail':'CO_EMAIL','co_email':'CO_EMAIL','coemail':'CO_EMAIL','co e-mail':'CO_EMAIL','cty':'COUNTY'};
+  function exportHeader(f){if(REF_NAMES.has(f.toLowerCase()))return 'REF';return EXPORT_RENAME[f.toLowerCase()]||f;}
+  function normKey(f){return f.toLowerCase().replace(/[\s_\-]+/g,'_');}
+  const normSeen=new Set();
+  const fields=[];
+  fieldsList.filter(f=>!SKIP.has(f)).forEach(f=>{
+    const nk=normKey(f);
+    if(!normSeen.has(nk)){normSeen.add(nk);fields.push(f);}
+  });
+  const headers=fields.map(exportHeader);
+
+  const realRecs=(recordsList||[]).filter(r=>r._status==='Done'||r._status==='Callback');
+  function collectVals(fieldName){
+    const vals=new Set();
+    realRecs.forEach(r=>{
+      let v=r[fieldName];
+      if((v===undefined||v===null||v==='')&&r.data){
+        const nk=normKey(fieldName);
+        const dk=Object.keys(r.data).find(k=>normKey(k)===nk);
+        if(dk)v=r.data[dk];
+      }
+      if(v&&String(v).trim()&&String(v)!=='(no)')vals.add(String(v).trim());
+    });
+    return[...vals];
+  }
+
+  const FAKE_COMPANIES=['Test Windows Ltd','Sample Glazing Co','Fake Frames Ltd','Demo Doors & Windows','Placeholder PVC Ltd','Example Conservatories Ltd','Dummy Glass Ltd','Prototype Fenestration Ltd','Specimen Cladding Co','Mock Installations Ltd'];
+  const FAKE_FIRST=['Test','Sample','Demo','Fake','Example','Dummy','Prototype','Specimen','Mock','Placeholder'];
+  const FAKE_LAST=['Person','Contact','User','Name','Tester','Smith','Jones','Wilson','Brown','Taylor'];
+  const FAKE_ADDS=[
+    {a1:'1 Test Street',town:'Testtown',pc:'TS1 1AB'},
+    {a1:'2 Sample Road',town:'Sampleville',pc:'SM2 2CD'},
+    {a1:'3 Demo Lane',town:'Demoford',pc:'DM3 3EF'},
+    {a1:'4 Fake Avenue',town:'Faketon',pc:'FK4 4GH'},
+    {a1:'5 Example Close',town:'Exampleton',pc:'EX5 5IJ'},
+    {a1:'6 Dummy Drive',town:'Dummyshire',pc:'DU6 6KL'},
+    {a1:'7 Prototype Way',town:'Prototown',pc:'PR7 7MN'},
+    {a1:'8 Specimen Crescent',town:'Specford',pc:'SP8 8OP'},
+    {a1:'9 Mock Terrace',town:'Mockbury',pc:'MK9 9QR'},
+    {a1:'10 Placeholder Mews',town:'Placeton',pc:'PL10 1ST'}
+  ];
+  const FAKE_PHONES=['01234 567890','01234 234567','02345 678901','01456 789012','01567 890123','01678 901234','01789 012345','01890 123456','01901 234567','01012 345678'];
+  const FAKE_MOBILES=['07700 900123','07700 900456','07700 900789','07700 901234','07700 901567','07700 901890','07700 902123','07700 902456','07700 902789','07700 903012'];
+  const FAKE_EMAILS=['test@example.com','sample@example.com','demo@example.com','fake@example.com','example@example.com','dummy@example.com','proto@example.com','spec@example.com','mock@example.com','place@example.com'];
+  const RESULTS=['Done','Callback','Part Val','Done','Done','Callback','Done','Part Val','Done','Done'];
+  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
+
+  const pName=projectName||'';
+  let projCode='';
+  const abbrMatch=pName.match(/\b([A-Z]{2,})\b/);
+  if(abbrMatch)projCode=abbrMatch[1];
+  else{
+    const words=pName.replace(/[^a-zA-Z0-9\s]/g,'').trim().split(/\s+/).filter(w=>w.length>1);
+    projCode=words.length?words[0].substring(0,3).toUpperCase():pName.substring(0,3).toUpperCase();
+  }
+
+  const rows=[];
+  for(let i=0;i<10;i++){
+    const row={};
+    const addr=FAKE_ADDS[i];
+    fields.forEach(f=>{
+      const nk=normKey(f);
+      const h=exportHeader(f).toLowerCase();
+      if(REF_NAMES.has(f.toLowerCase())){row[f]='TEST-'+String(i+1).padStart(4,'0');return;}
+      if(nk==='company'||nk==='co_name'){row[f]=FAKE_COMPANIES[i];return;}
+      if(nk==='aka'||nk==='parent_company'){row[f]='';return;}
+      if(nk==='add1'){row[f]=addr.a1;return;}
+      if(nk==='add2'||nk==='add3'||nk==='add4'){row[f]='';return;}
+      if(nk==='town'){row[f]=addr.town;return;}
+      if(nk==='postcode'){row[f]=addr.pc;return;}
+      if(nk==='firstn_1'){row[f]=FAKE_FIRST[i];return;}
+      if(nk==='surname_1'){row[f]=FAKE_LAST[i];return;}
+      if(nk==='position_1'){row[f]=['Director','Manager','Owner','MD','Sales Manager','Buyer','Ops Manager','Technical Dir','Contracts Mgr','Partner'][i];return;}
+      if(nk==='phone_1'){row[f]=FAKE_PHONES[i];return;}
+      if(nk==='e_mail_1'){row[f]=FAKE_EMAILS[i];return;}
+      if(/^(title|firstn|surname|position|phone|e_mail|linkedin)_[23]$/.test(nk)){row[f]='';return;}
+      if(nk==='co_phone'){row[f]=FAKE_PHONES[i];return;}
+      if(nk==='mphone'){row[f]=FAKE_MOBILES[i];return;}
+      if(nk==='co_fax'){row[f]='';return;}
+      if(nk==='co_e_mail'||nk==='co_email'||h==='co_email'){row[f]=FAKE_EMAILS[i];return;}
+      if(nk==='website'){row[f]='';return;}
+      if(/linkedin/.test(nk)){row[f]='';return;}
+      if(nk==='country'){const rv=collectVals(f);row[f]=rv.length?rv[i%rv.length]:'UK';return;}
+      if(nk==='region'){const rv=collectVals(f);row[f]=rv.length?rv[i%rv.length]:'';return;}
+      if(nk==='cty'){const rv=collectVals(f);row[f]=rv.length?rv[i%rv.length]:'';return;}
+      if(nk==='result'){row[f]=RESULTS[i];return;}
+      if(nk==='date_val'||nk==='last_up'){row[f]=today;return;}
+      if(nk==='researcher'){row[f]='Test User';return;}
+      if(nk==='company_number'){row[f]='';return;}
+      if(nk==='office'){const rv=collectVals(f);row[f]=rv.length?rv[i%rv.length]:'';return;}
+      if(nk==='co_employees'||nk==='site_employee'){const rv=collectVals(f);row[f]=rv.length?rv[i%rv.length]:'';return;}
+      const realVals=collectVals(f);
+      if(realVals.length){row[f]=realVals[i%realVals.length];return;}
+      if(/notes/.test(nk)){row[f]='';return;}
+      row[f]='';
+    });
+    rows.push(row);
+  }
+  return{fields,headers,rows,projCode,today};
+}
+
+function downloadTestXlsx(fields,headers,rows,projCode,today){
+  const wsData=[['*** TEST FILE — NOT REAL DATA ***']];
+  wsData.push(headers);
+  rows.forEach(r=>wsData.push(fields.map(f=>{let v=r[f]??'';if(v==='(no)')v='';return v;})));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}}];
+  XLSX.utils.book_append_sheet(wb,ws,'TEST DATA');
+  const fileName='TEST_'+projCode+'_'+today+'.xlsx';
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=fileName;a.click();
+  return fileName;
+}
+
+function exportTestSheet(){
+  if(!isSuperuser){showToast('Superuser only','error');return;}
+  if(!currentProject||!projFields.length){showToast('No project loaded','error');return;}
+  const d=generateTestSheetData(projFields,records,currentProject.name);
+  const fn=downloadTestXlsx(d.fields,d.headers,d.rows,d.projCode,d.today);
+  showToast('Test sheet exported: '+fn,'done');
+}
+
+function deriveProjectCode(name){
+  const abbrMatch=(name||'').match(/\b([A-Z]{2,})\b/);
+  if(abbrMatch)return abbrMatch[1];
+  const words=(name||'').replace(/[^a-zA-Z0-9\s]/g,'').trim().split(/\s+/).filter(w=>w.length>1);
+  return words.length?words[0].substring(0,3).toUpperCase():(name||'???').substring(0,3).toUpperCase();
+}
+
+function renderDbTemplateList(){
+  const cont=gel('dbTemplatesContent');
+  if(!projects.length){cont.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">No projects found.</div>';return;}
+  const rows=projects.map(p=>{
+    const code=deriveProjectCode(p.name);
+    const done=p.done_count||0;
+    const cb=p.callback_count||0;
+    return`<tr>
+      <td><strong>${esc(p.name)}</strong></td>
+      <td style="font-size:12px;color:var(--muted);font-family:monospace;">${esc(code)}</td>
+      <td style="font-size:12px;text-align:center;"><span style="color:var(--done);">${done}</span> Done / <span style="color:var(--cb);">${cb}</span> Callback</td>
+      <td style="text-align:right;"><button class="user-action-btn" onclick="previewDbTemplate('${p.id}')">Preview Test Sheet</button></td>
+    </tr>`;
+  }).join('');
+  cont.innerHTML=`<table class="act-table"><thead><tr><th>Project</th><th>Code</th><th style="text-align:center;">Records</th><th style="width:160px;"></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function previewDbTemplate(projId){
+  const proj=projects.find(p=>p.id===projId);
+  if(!proj){showToast('Project not found','error');return;}
+  // Load project fields and records for this project
+  const{data:projData}=await sb.from('projects').select('fields').eq('id',projId).single();
+  const pFields=projData?Array.isArray(projData.fields)?projData.fields:JSON.parse(projData.fields||'[]'):[];
+  if(!pFields.length){showToast('No fields configured for this project','error');return;}
+  const{data:recs}=await sb.from('records').select('*').eq('project_id',projId).in('_status',['Done','Callback']).limit(500);
+  const recList=(recs||[]).map(r=>({...r,...(r.data||{})}));
+
+  const d=generateTestSheetData(pFields,recList,proj.name);
+
+  // Build preview table
+  gel('dbTplPreviewTitle').textContent='Test Sheet Preview — '+proj.name;
+  const thRow=d.headers.map(h=>'<th style="white-space:nowrap;padding:6px 10px;font-size:11px;background:rgba(255,255,255,.1);">'+esc(h)+'</th>').join('');
+  const bodyRows=d.rows.map(r=>'<tr>'+d.fields.map(f=>'<td style="white-space:nowrap;padding:4px 10px;font-size:11px;">'+esc(String(r[f]||''))+'</td>').join('')+'</tr>').join('');
+  gel('dbTplPreviewTable').innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--cb);margin-bottom:8px;">*** TEST FILE — NOT REAL DATA ***</div>
+    <div style="overflow-x:auto;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">
+    <table class="act-table" style="min-width:max-content;"><thead><tr>${thRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">Filename: TEST_${esc(d.projCode)}_${d.today}.xlsx</div>`;
+
+  // Wire download button
+  const dlBtn=gel('dbTplDownloadBtn');
+  dlBtn.onclick=()=>{
+    const fn=downloadTestXlsx(d.fields,d.headers,d.rows,d.projCode,d.today);
+    showToast('Downloaded: '+fn,'done');
+  };
+  openModal('dbTplPreviewModal');
+}
+
 function openModal(id){
   gel(id).classList.add('open');
   if(id==='newUserModal'){
@@ -3467,12 +3678,14 @@ async function openPermissions(email,name){
   const{data,error}=await sb.from('user_roles').select('*').eq('user_email',email).single();
   const perms=data&&Array.isArray(data.permissions)?data.permissions:[];
   gel('permCanExport').checked=perms.includes('can_export');
+  gel('permCanGenTemplate').checked=perms.includes('can_generate_template');
   openModal('permsModal');
 }
 async function savePermissions(){
   if(!_permsEmail)return;
   const perms=[];
   if(gel('permCanExport').checked)perms.push('can_export');
+  if(gel('permCanGenTemplate').checked)perms.push('can_generate_template');
   // Upsert — handles both existing rows and missing rows
   const{error}=await sb.from('user_roles').upsert({user_email:_permsEmail,permissions:perms},{onConflict:'user_email'});
   if(error){showToast('Failed to save permissions: '+error.message,'error');return;}
@@ -4438,6 +4651,15 @@ async function goToTemplates(){
   showScreen('templates');
   await loadEmailTemplates();
   renderTemplateList();
+  // Database Templates section — visible to superusers or users with can_generate_template
+  const dbSec=gel('dbTemplatesSection');
+  if(dbSec){
+    if(hasPermission('can_generate_template')){
+      dbSec.style.display='';
+      await loadProjects();
+      renderDbTemplateList();
+    }else{dbSec.style.display='none';}
+  }
 }
 
 function renderTemplateList(){
