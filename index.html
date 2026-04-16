@@ -644,6 +644,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <h3>New Project</h3>
     <div class="modal-sub">Give this research project a name. You can import a CSV or add records manually afterwards.</div>
     <div class="modal-field"><div class="modal-label">Project Name</div><input class="modal-input" type="text" id="newProjName" placeholder="e.g. Sealed Unit Manufacturers" onkeydown="if(event.key==='Enter')createProject()"></div>
+    <div class="modal-field" id="newProjPinnedWrap" style="display:none;"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="newProjPinned" style="width:16px;height:16px;"> This is a permanent project (always visible on dashboard even when empty)</label></div>
     <div class="modal-actions">
       <button class="mbtn mbtn-primary" onclick="createProject()">Create Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('newProjModal')">Cancel</button>
@@ -1076,7 +1077,8 @@ async function loadProjects(){
 
 async function createProject(){
   const name=val('newProjName').trim();if(!name){alert('Enter a project name.');return;}
-  const{data,error}=await sb.from('projects').insert({name,fields:'[]',created_by:currentUser.email}).select().single();
+  const pinned=!!(gel('newProjPinned')&&gel('newProjPinned').checked);
+  const{data,error}=await sb.from('projects').insert({name,fields:'[]',created_by:currentUser.email,is_pinned:pinned}).select().single();
   if(error){showToast('Error: '+error.message,'error');return;}
   closeModal('newProjModal');gel('newProjName').value='';
   await loadProjects();renderDashboard();openProject(data.id);
@@ -1095,6 +1097,14 @@ async function confirmDeleteProject(){
   if(projErr){showToast('Failed to delete project: '+projErr.message,'error');return;}
   closeModal('deleteProjModal');projToDelete=null;
   await loadProjects();renderDashboard();showToast('Project deleted','info');
+}
+
+async function toggleProjectPin(projId,newPinned,e){
+  e.stopPropagation();
+  const{error}=await sb.from('projects').update({is_pinned:newPinned}).eq('id',projId);
+  if(error){showToast('Failed to update: '+error.message,'error');return;}
+  await loadProjects();renderDashboard();
+  showToast(newPinned?'Project marked as permanent':'Project marked as temporary','done');
 }
 
 function openLinkProjModal(){
@@ -1141,9 +1151,9 @@ function renderDashboard(){
   function makeParentCard(p){
     const isPinned=!!p.is_pinned;
     const c=document.createElement('div');c.className='project-card'+(isPinned?' pinned-card':'');c.onclick=()=>openProject(p.id);
-    const badge=isPinned?'<span class="pinned-badge">WDC</span>':'';
     const delBtn=(!isPinned&&isSuperuser)?`<button class="pc-del" onclick="openDeleteProjModal('${p.id}','${esc(p.name)}',event)">✕ Delete</button>`:'';
-    c.innerHTML=`<div class="pc-header"><div class="pc-name">${esc(p.name)}${badge}</div>${delBtn}</div>
+    const pinToggle=isSuperuser?`<button class="pc-pin" onclick="toggleProjectPin('${p.id}',${isPinned?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPinned?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPinned?'Remove permanent status':'Make permanent'}">${isPinned?'★ Permanent':'☆ Make Permanent'}</button>`:'';
+    c.innerHTML=`<div class="pc-header"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${pinToggle}${delBtn}</div></div>
       <div class="pc-body"><div class="pc-stats">
         <div class="pc-stat"><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
         <div class="pc-stat"><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
@@ -3382,6 +3392,10 @@ async function previewDbTemplate(projId){
 
 function openModal(id){
   gel(id).classList.add('open');
+  if(id==='newProjModal'){
+    const pw=gel('newProjPinnedWrap');if(pw)pw.style.display=isSuperuser?'':'none';
+    const pc=gel('newProjPinned');if(pc)pc.checked=false;
+  }
   if(id==='newUserModal'){
     const btn=gel('nuBtn');
     if(btn){btn.disabled=false;btn.textContent='Send Invite';}
