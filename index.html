@@ -4174,9 +4174,23 @@ function maybeShowEmailPrompt(recordIdx){
   // Populate recipient dropdown
   const toSel=gel('emailTo');
   toSel.innerHTML=emails.map((e,i)=>`<option value="${esc(e.address)}" data-field="${e.field}" ${i===0?'selected':''}>${esc(e.label)}</option>`).join('');
-  // Populate template dropdown
+  // Populate template dropdown — filter by record type (INSTALL/MAKE fields)
+  const installVal=getFieldVal(r,'INSTALL')||getFieldVal(r,'Install')||'';
+  const makeVal=getFieldVal(r,'MAKE')||getFieldVal(r,'Make')||'';
+  const isInstaller=!!(installVal&&installVal!=='(no)');
+  const isFabricator=!!(makeVal&&makeVal!=='(no)');
+  const hasType=isInstaller||isFabricator;
+  let visibleTpls=EMAIL_TEMPLATES.map((t,i)=>({...t,_idx:i}));
+  if(hasType){
+    visibleTpls=visibleTpls.filter(t=>{
+      if(!t.record_type)return true; // no restriction — always show
+      if(t.record_type==='installer'&&isInstaller)return true;
+      if(t.record_type==='fabricator'&&isFabricator)return true;
+      return false;
+    });
+  }
   const tplSel=gel('emailTpl');
-  tplSel.innerHTML=EMAIL_TEMPLATES.map((t,i)=>`<option value="${i}">${esc(t.name)}</option>`).join('');
+  tplSel.innerHTML=visibleTpls.map(t=>`<option value="${t._idx}">${esc(t.name)}</option>`).join('');
   // From address
   gel('emailFrom').value=getUserDisplayName()+' <'+currentUser.email+'>';
   // Reset test mode and apply first template
@@ -4662,14 +4676,14 @@ let _editingTplId=null;
 async function loadEmailTemplates(){
   const{data,error}=await sb.from('email_templates').select('*').order('name');
   if(!error&&data&&data.length>0){
-    EMAIL_TEMPLATES=data.map(t=>({id:t.id,name:t.name,subject:t.subject,body:t.body,updated_at:t.updated_at}));
+    EMAIL_TEMPLATES=data.map(t=>({id:t.id,name:t.name,subject:t.subject,body:t.body,updated_at:t.updated_at,record_type:t.record_type||null}));
   }else if(!error&&(!data||data.length===0)){
     // Seed with hardcoded templates
     for(const t of SEED_EMAIL_TEMPLATES){
       await sb.from('email_templates').insert({name:t.name,subject:t.subject,body:t.body});
     }
     const{data:seeded}=await sb.from('email_templates').select('*').order('name');
-    if(seeded)EMAIL_TEMPLATES=seeded.map(t=>({id:t.id,name:t.name,subject:t.subject,body:t.body,updated_at:t.updated_at}));
+    if(seeded)EMAIL_TEMPLATES=seeded.map(t=>({id:t.id,name:t.name,subject:t.subject,body:t.body,updated_at:t.updated_at,record_type:t.record_type||null}));
   }
 }
 
