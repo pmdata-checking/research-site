@@ -75,22 +75,22 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 .dash-scroll{flex:1;overflow-y:auto;padding:28px;}
 .dash-grid{display:flex;flex-direction:column;gap:16px;}
 .dash-row{display:flex;flex-direction:row;gap:16px;align-items:stretch;}
-.project-card{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(26,46,74,.07);transition:box-shadow .2s,transform .15s;cursor:pointer;}
+.project-card{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(26,46,74,.07);transition:box-shadow .2s,transform .15s;cursor:pointer;display:flex;flex-direction:column;}
 .project-card:hover{box-shadow:0 6px 24px rgba(26,46,74,.13);transform:translateY(-2px);}
 .pc-header{background:var(--navy);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;}
 .pc-name{font-family:var(--font);font-size:14px;font-weight:700;color:#fff;flex:1;margin-right:10px;}
 .pc-del{background:none;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:rgba(255,255,255,.5);cursor:pointer;font-size:11px;padding:3px 8px;transition:all .15s;}
 .pc-del:hover{border-color:rgba(220,80,60,.6);color:#ff8070;background:rgba(192,57,43,.18);}
-.pc-body{padding:16px 18px;}
+.pc-body{padding:16px 18px;flex:1;display:flex;flex-direction:column;}
 .pc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
 .pc-stat{text-align:center;padding:10px 6px;border-radius:6px;background:var(--off);}
 .pc-stat-num{font-family:var(--font);font-size:20px;font-weight:800;color:var(--navy);}
 .pc-stat-num.g{color:var(--done);}
 .pc-stat-num.o{color:var(--cb);}
 .pc-stat-label{font-family:var(--font);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:2px;}
-.pc-open-btn{width:100%;background:var(--green);border:none;border-radius:6px;color:#fff;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:10px;transition:background .15s;}
+.pc-open-btn{width:100%;background:var(--green);border:none;border-radius:6px;color:#fff;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:10px;transition:background .15s;margin-top:auto;}
 .pc-open-btn:hover{background:var(--green2);}
-.companion-card{background:#fff;border:1px solid var(--border);border-left:4px solid var(--green);border-radius:10px;overflow:hidden;box-shadow:0 1px 6px rgba(26,46,74,.05);transition:box-shadow .2s,transform .15s;cursor:pointer;margin-left:20px;}
+.companion-card{background:#fff;border:1px solid var(--border);border-left:4px solid var(--green);border-radius:10px;overflow:hidden;box-shadow:0 1px 6px rgba(26,46,74,.05);transition:box-shadow .2s,transform .15s;cursor:pointer;margin-left:20px;display:flex;flex-direction:column;}
 .companion-card:hover{box-shadow:0 4px 16px rgba(26,46,74,.1);transform:translateY(-1px);}
 .companion-tag{font-family:var(--font);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green);background:#f0fae0;padding:2px 8px;border-radius:10px;margin-left:8px;}
 .pinned-card{border-left:4px solid var(--teal)!important;}
@@ -1234,13 +1234,13 @@ function renderDashboard(){
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
       </div>
-      <div class="pc-body" style="padding:12px 18px;">
+      <div class="pc-body" style="padding:12px 18px;flex:1;display:flex;flex-direction:column;">
         <div class="pc-stats" style="margin-bottom:10px;">
           <div class="pc-stat"><div class="pc-stat-num" style="font-size:16px;">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
           <div class="pc-stat"><div class="pc-stat-num o" style="font-size:16px;">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
           <div class="pc-stat"><div class="pc-stat-num g" style="font-size:16px;">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
         </div>
-        <button class="pc-open-btn" style="background:${headerBg};">Open New Records →</button>
+        <button class="pc-open-btn" style="background:${headerBg};margin-top:auto;">Open New Records →</button>
       </div>`;
     return cc;
   }
