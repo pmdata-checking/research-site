@@ -1057,6 +1057,9 @@ function updateNavVisibility(){
   const tplBtn=gel('templatesBtn');if(tplBtn)tplBtn.style.display='';
   const usrBtn=gel('usersBtn');if(usrBtn)usrBtn.style.display=isSuperuser?'':'none';
   const expBtn=gel('exportBtn');// export visibility handled per-project in openProject
+  // Birdseye button: superusers get "🔭 Birdseye" → dashboard, researchers get "📋 Timesheet" → timesheet
+  const bsBtn=gel('birdseyeBtn');
+  if(bsBtn)bsBtn.textContent=isSuperuser?'🔭 Birdseye':'📋 Timesheet';
 }
 
 async function launch(){
@@ -4356,9 +4359,11 @@ async function goToBirdseye(){
   const canView=isSuperuser||hasPermission('can_view_birdseye');
   const vt=gel('bsViewToggle');if(vt)vt.style.display=canView?'':'none';
   const xb=gel('bsExportBtn');if(xb)xb.style.display=canView?'':'none';
-  gel('bsTimesheet').style.display='';
-  gel('bsDashboard').style.display='none';
-  gel('bsViewToggle').textContent='📊 Dashboard';
+  // Superusers default to Dashboard view; researchers default to Timesheet
+  const startDashboard=isSuperuser;
+  gel('bsTimesheet').style.display=startDashboard?'none':'';
+  gel('bsDashboard').style.display=startDashboard?'':'none';
+  gel('bsViewToggle').textContent=startDashboard?'📝 Timesheet':'📊 Dashboard';
   // Default week ending = next Friday
   _bsWeekEnding=bsFridayFor(new Date());
   // Default day = today's day if it falls in the week, else Friday
@@ -4366,7 +4371,8 @@ async function goToBirdseye(){
   const dow=today.getDay();
   const dayMap={5:'fri',1:'mon',2:'tue',3:'wed',4:'thu'};
   _bsSelectedDay=dayMap[dow]||'fri';
-  await bsRenderWeek();
+  if(startDashboard)await bsRenderDashboard();
+  else await bsRenderWeek();
 }
 
 async function bsToggleView(){
