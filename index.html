@@ -4398,7 +4398,7 @@ function bsRenderTabs(){
   gel('bsDayTabs').innerHTML=tabs.map(t=>{
     const active=t.key===_bsSelectedDay;
     const dateStr=t.date?('<div style="font-size:10px;font-weight:500;opacity:.7;margin-top:2px;">'+t.date.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][t.date.getMonth()]+'</div>'):'';
-    return`<button onclick="bsSelectDay('${t.key}')" style="background:${active?'rgba(255,255,255,.15)':'transparent'};border:none;border-bottom:3px solid ${active?'var(--teal)':'transparent'};color:${active?'#fff':'rgba(255,255,255,.6)'};cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 16px;transition:all .15s;">${t.label}${dateStr}</button>`;
+    return`<button onclick="bsSelectDay('${t.key}')" style="background:${active?'var(--navy)':'#fff'};border:1px solid var(--border);border-bottom:3px solid ${active?'var(--teal)':'var(--border)'};color:${active?'#fff':'var(--navy)'};cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:10px 16px;border-radius:6px 6px 0 0;transition:all .15s;">${t.label}${dateStr}</button>`;
   }).join('');
 }
 
