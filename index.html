@@ -4621,7 +4621,6 @@ async function csLoadReport(connectId){
     if(!res.ok)throw new Error(json.error||'Unable to load report — please try again');
     gel('csReportLoading').style.display='none';
     const rpt=json.report||{};
-    console.log('CreditSafe FULL report response:',JSON.stringify(json,null,2));
     const co=rpt.companySummary||rpt.companyIdentification||{};
     const name=co.businessName||co.companyName||rpt.companyName||'';
     const regNo=co.companyRegistrationNumber||co.companyNumber||'';
@@ -4642,7 +4641,7 @@ async function csLoadReport(connectId){
     // Directors
     const dirs=(rpt.directors?.currentDirectors||rpt.directors||[]);
     console.log('CreditSafe directors raw:',JSON.stringify(dirs?.slice(0,3)));
-    let dirsHtml='<div style="color:var(--muted);font-size:12px;padding:8px 0;">No director information available</div>';
+    let dirsHtml='<div style="color:#999;font-style:italic;font-size:13px;padding:8px 0;">No directors found</div>';
     if(dirs.length){
       // Store parsed directors for copy
       const parsedDirs=dirs.map(d=>{
@@ -4687,47 +4686,51 @@ async function csLoadReport(connectId){
       </table>`;
     }
     gel('csReportContent').innerHTML=`
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
-        <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Company Info</div>
-        <div style="display:flex;align-items:center;"><span style="font-size:18px;font-weight:800;color:var(--navy);">${esc(name)}</span>${cpBtn(['Company','COMPANY'],name,'Company')}</div>
-        ${regNo?`<div style="display:flex;align-items:center;margin-top:4px;"><span style="font-size:13px;color:var(--muted);">Registration: ${esc(regNo)}</span>${cpBtn(['Company_Number','CO_NUMBER','Company Number'],regNo,'Reg')}</div>`:''}
-        <div style="font-size:13px;font-weight:700;${statusCls}margin-top:4px;">${esc(status)}</div>
-        ${(()=>{
-          const ai=rpt.additionalInformation||{};
-          const ei=ai.employeesInformation||ai.employees||{};
-          const bi=rpt.companyIdentification?.basicInformation||{};
-          const emp=ei.numberOfEmployees||ei.employees||ei.count||bi.numberOfEmployees||rpt.companySummary?.numberOfEmployees||ai.numberOfEmployees||'';
-          const empStr=emp?String(emp):'';
-          return empStr?`<div style="display:flex;align-items:center;margin-top:4px;"><span style="font-size:13px;color:var(--muted);">Employees: ${esc(empStr)}</span>${cpBtn(['Co_Employees','CO_EMPLOYEES','Co Employees','Co_Size','CO_SIZE'],empStr,'Employees')}</div>`:'';
-        })()}
-      </div>
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
-        <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Registered Address</div>
-        ${addrStreet?`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>${esc(addrStreet)}</span>${cpBtn(['add1','ADD1'],addrStreet,'Street')}</div>`:''}
-        ${addrCity?`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>${esc(addrCity)}</span>${cpBtn(['Town','TOWN'],addrCity,'City')}</div>`:''}
-        ${addrRegion?`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>${esc(addrRegion)}</span>${cpBtn(['Cty','CTY','COUNTY'],addrRegion,'Region')}</div>`:''}
-        ${addrPostcode?`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>${esc(addrPostcode)}</span>${cpBtn(['Postcode','POSTCODE'],addrPostcode,'Postcode')}</div>`:''}
-      </div>
       ${(()=>{
-        // Contact information from report
+        const naStyle='color:#999;font-style:italic;';
+        const ai=rpt.additionalInformation||{};
+        const ei=ai.employeesInformation||ai.employees||{};
+        const bi=rpt.companyIdentification?.basicInformation||{};
+        const emp=ei.numberOfEmployees||ei.employees||ei.count||bi.numberOfEmployees||rpt.companySummary?.numberOfEmployees||ai.numberOfEmployees||'';
+        const empStr=emp?String(emp):'';
+        return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
+          <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Company Info</div>
+          <div style="display:flex;align-items:center;"><span style="font-size:18px;font-weight:800;color:var(--navy);">${esc(name)}</span>${cpBtn(['Company','COMPANY'],name,'Company')}</div>
+          <div style="display:flex;align-items:center;margin-top:4px;font-size:13px;color:var(--muted);">Registration: ${regNo?`<span style="margin-left:4px;">${esc(regNo)}</span>${cpBtn(['Company_Number','CO_NUMBER','Company Number'],regNo,'Reg')}`:`<span style="margin-left:4px;${naStyle}">Not available</span>`}</div>
+          <div style="margin-top:4px;font-size:13px;">Status: ${status?`<span style="font-weight:700;${statusCls}">${esc(status)}</span>`:`<span style="${naStyle}">Not available</span>`}</div>
+          <div style="display:flex;align-items:center;margin-top:4px;font-size:13px;color:var(--muted);">Employees: ${empStr?`<span style="margin-left:4px;">${esc(empStr)}</span>${cpBtn(['Co_Employees','CO_EMPLOYEES','Co Employees','Co_Size','CO_SIZE'],empStr,'Employees')}`:`<span style="margin-left:4px;${naStyle}">Not available</span>`}</div>
+        </div>`;
+      })()}
+      ${(()=>{
+        const naStyle='color:#999;font-style:italic;';
+        const row=(label,value,fields,copyLabel)=>`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;color:var(--muted);">${label}: ${value?`<span style="margin-left:4px;color:var(--text);">${esc(value)}</span>${cpBtn(fields,value,copyLabel)}`:`<span style="margin-left:4px;${naStyle}">Not available</span>`}</div>`;
+        return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
+          <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Registered Address</div>
+          ${row('Street',addrStreet,['add1','ADD1'],'Street')}
+          ${row('City',addrCity,['Town','TOWN'],'City')}
+          ${row('Region',addrRegion,['Cty','CTY','COUNTY'],'Region')}
+          ${row('Postcode',addrPostcode,['Postcode','POSTCODE'],'Postcode')}
+        </div>`;
+      })()}
+      ${(()=>{
+        const naStyle='color:#999;font-style:italic;';
         const ci=rpt.contactInformation||{};
         const csPhone=(ci.mainTelephoneNumber||ci.telephone||ci.phoneNumber||'').trim();
         const csWebsite=(ci.websites?ci.websites[0]:(ci.website||'')).trim();
-        // Collect emails — support both single (emailAddress/email) and array (emailAddresses)
         let emailList=[];
         if(Array.isArray(ci.emailAddresses))emailList=ci.emailAddresses.map(e=>typeof e==='string'?e:(e.email||e.address||e.emailAddress||'')).filter(Boolean);
         else if(ci.emailAddress)emailList=[ci.emailAddress];
         else if(ci.email)emailList=[ci.email];
         emailList=emailList.map(e=>String(e).trim()).filter(Boolean);
-        const hasContact=csPhone||csWebsite||emailList.length;
-        if(!hasContact)return '';
-        let rows='';
-        if(csPhone)rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>📞 ${esc(csPhone)}</span>${cpBtn(['Co_Phone','PHONE','Co Phone'],csPhone,'Phone')}</div>`;
-        if(csWebsite)rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>🌐 ${esc(csWebsite)}</span>${cpBtn(['website','WEBSITE','Website'],csWebsite,'Website')}</div>`;
-        emailList.forEach(em=>{rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>✉ ${esc(em)}</span>${cpBtn(["Co_E-mail","CO_EMAIL","Co E-mail"],em,'Email')}</div>`;});
+        const row=(icon,value,fields,copyLabel)=>`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;">${value?`<span>${icon} ${esc(value)}</span>${cpBtn(fields,value,copyLabel)}`:`<span>${icon} <span style="${naStyle}">Not available</span></span>`}</div>`;
+        let emailRows='';
+        if(emailList.length)emailList.forEach(em=>{emailRows+=row('✉',em,["Co_E-mail","CO_EMAIL","Co E-mail"],'Email');});
+        else emailRows=row('✉','',["Co_E-mail","CO_EMAIL","Co E-mail"],'Email');
         return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
           <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Contact Information</div>
-          ${rows}
+          ${row('📞',csPhone,['Co_Phone','PHONE','Co Phone'],'Phone')}
+          ${row('🌐',csWebsite,['website','WEBSITE','Website'],'Website')}
+          ${emailRows}
         </div>`;
       })()}
       <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;">
