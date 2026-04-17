@@ -516,6 +516,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <button class="db-btn" onclick="goToDashboard()" style="background:rgba(255,255,255,.15);margin-right:8px;">← Back</button>
         <span class="dash-title">🦅 Birdseye</span>
         <button class="db-btn" id="bsViewToggle" onclick="bsToggleView()" style="display:none;background:rgba(255,255,255,.15);">📊 Dashboard</button>
+        <button class="db-btn" id="bsExportBtn" onclick="bsExportWeek()" style="display:none;background:rgba(255,255,255,.15);">↓ Export Week</button>
       </div>
       <div class="dash-scroll">
         <div id="bsTimesheet" style="max-width:1400px;margin:0 auto;">
@@ -530,11 +531,13 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <div id="bsDayContent"></div>
         </div>
         <div id="bsDashboard" style="max-width:1400px;margin:0 auto;display:none;">
-          <div style="background:#fff;border:1px dashed var(--border);border-radius:8px;padding:60px 40px;text-align:center;">
-            <div style="font-size:40px;margin-bottom:16px;">🦅</div>
-            <div style="font-family:var(--font);font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px;">Birdseye Dashboard coming soon</div>
-            <div style="font-family:var(--font);font-size:12px;color:var(--muted);">Team productivity analytics will be available in Phase 2.</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--navy);padding:14px 18px;border-radius:8px;color:#fff;">
+            <button class="db-btn" onclick="bsPrevWeek()" style="background:rgba(255,255,255,.15);">← Previous Week</button>
+            <button class="db-btn" onclick="bsCurrentWeek()" style="background:rgba(255,255,255,.15);">This Week</button>
+            <div style="flex:1;text-align:center;"><div id="bsDashWeekLabel" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;"></div></div>
+            <button class="db-btn" onclick="bsNextWeek()" style="background:rgba(255,255,255,.15);">Next Week →</button>
           </div>
+          <div id="bsDashContent"></div>
         </div>
       </div>
     </div>
@@ -4347,10 +4350,13 @@ async function goToBirdseye(){
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
   gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
   showScreen('birdseye');
-  // Show dashboard toggle for superusers / permitted users
-  const vt=gel('bsViewToggle');if(vt)vt.style.display=(isSuperuser||hasPermission('can_view_birdseye'))?'':'none';
+  // Show dashboard toggle + export for superusers / permitted users
+  const canView=isSuperuser||hasPermission('can_view_birdseye');
+  const vt=gel('bsViewToggle');if(vt)vt.style.display=canView?'':'none';
+  const xb=gel('bsExportBtn');if(xb)xb.style.display=canView?'':'none';
   gel('bsTimesheet').style.display='';
   gel('bsDashboard').style.display='none';
+  gel('bsViewToggle').textContent='📊 Dashboard';
   // Default week ending = next Friday
   _bsWeekEnding=bsFridayFor(new Date());
   // Default day = today's day if it falls in the week, else Friday
@@ -4361,16 +4367,30 @@ async function goToBirdseye(){
   await bsRenderWeek();
 }
 
-function bsToggleView(){
+async function bsToggleView(){
   const ts=gel('bsTimesheet'),db=gel('bsDashboard');
   const showingTs=ts.style.display!=='none';
   ts.style.display=showingTs?'none':'';
   db.style.display=showingTs?'':'none';
   gel('bsViewToggle').textContent=showingTs?'📝 Timesheet':'📊 Dashboard';
+  if(showingTs)await bsRenderDashboard();
 }
 
-async function bsPrevWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.setDate(_bsWeekEnding.getDate()-7);await bsRenderWeek();}
-async function bsNextWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.setDate(_bsWeekEnding.getDate()+7);await bsRenderWeek();}
+function bsDashboardVisible(){return gel('bsDashboard').style.display!=='none';}
+
+async function bsRefresh(){
+  if(bsDashboardVisible())await bsRenderDashboard();
+  else await bsRenderWeek();
+}
+
+async function bsPrevWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.setDate(_bsWeekEnding.getDate()-7);await bsRefresh();}
+async function bsNextWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.setDate(_bsWeekEnding.getDate()+7);await bsRefresh();}
+async function bsCurrentWeek(){_bsWeekEnding=bsFridayFor(new Date());await bsRefresh();}
+
+function bsIsCurrentWeek(){
+  const curFri=bsFridayFor(new Date());
+  return bsFormatDate(_bsWeekEnding)===bsFormatDate(curFri);
+}
 
 async function bsRenderWeek(){
   gel('bsWeekEnding').textContent=getUserDisplayName()+' — Week ending '+bsFormatNice(_bsWeekEnding);
@@ -4417,6 +4437,8 @@ function bsRenderDay(){
   const dateStr=bsFormatDate(date);
   const weekEndStr=bsFormatDate(_bsWeekEnding);
 
+  const readOnly=!bsIsCurrentWeek();
+  const disAttr=readOnly?' disabled':'';
   // Build hour rows. "called" is read-only (auto = validated+vm_nr+refused+callback+gone)
   const rows=BS_HOURS.map(hour=>{
     const existing=_bsEntries.filter(e=>e.entry_date===dateStr&&e.hour_slot===hour);
@@ -4426,15 +4448,16 @@ function bsRenderDay(){
         const calc=(ent.validated||0)+(ent.vm_nr||0)+(ent.refused||0)+(ent.callback||0)+(ent.gone||0);
         return`<td style="padding:4px 6px;"><input type="number" readonly class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;background:var(--off);color:var(--muted);cursor:not-allowed;" data-field="called" value="${calc||''}"></td>`;
       }
-      return`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="${f}" value="${ent[f]||''}" oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`;
+      return`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="${f}" value="${ent[f]||''}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`;
     };
     return`<tr data-hour="${esc(hour)}">
       <td style="font-size:12px;font-weight:700;white-space:nowrap;padding:6px 8px;">${esc(hour)}</td>
-      <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;" onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DATABASES.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
+      <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;"${disAttr} onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DATABASES.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
       ${BS_COUNT_FIELDS.map(cellField).join('')}
-      <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}" oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
+      <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
     </tr>`;
   }).join('');
+  const roBanner=readOnly?`<div style="background:#fff7e6;border:1px solid #ffb366;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#8a4b00;"><strong>Read-only:</strong> You are viewing a previous week. Entries cannot be edited.</div>`:'';
 
   // Daily summary per database
   const dayTotals={};
@@ -4445,6 +4468,7 @@ function bsRenderDay(){
   const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
 
   container.innerHTML=`
+    ${roBanner}
     <div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:20px;">
       <table class="act-table" style="width:100%;">
         <thead><tr>
@@ -4487,6 +4511,157 @@ function bsRenderWeekSummary(container){
     </div>`;
 }
 
+// Fetch ALL users' entries for the current week (dashboard + export)
+async function bsFetchWeekAll(){
+  const dates=bsDayDates(_bsWeekEnding);
+  const startDate=bsFormatDate(dates.fri);
+  const endDate=bsFormatDate(dates.thu);
+  const{data,error}=await sb.from('birdseye_entries').select('*').gte('entry_date',startDate).lte('entry_date',endDate).order('user_name');
+  if(error){showToast('Failed to load dashboard data: '+error.message,'error');return[];}
+  return data||[];
+}
+
+// Aggregate entries into per-database totals with hours and rate
+function bsAggregateByDatabase(entries){
+  const out={};
+  BS_DATABASES.forEach(db=>{out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set()};});
+  entries.forEach(e=>{
+    const db=e.database_name;
+    if(!out[db])out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set()};
+    BS_COUNT_FIELDS.forEach(f=>{out[db][f]+=(e[f]||0);});
+    out[db]._hours.add(e.entry_date+'__'+e.hour_slot);
+  });
+  Object.values(out).forEach(t=>{t.hours=t._hours.size;t.rate=t.hours>0?(t.validated/t.hours).toFixed(2):'';delete t._hours;});
+  return out;
+}
+
+function bsRenderResearcherCard(name,totals,entries){
+  const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+  const hourSet=new Set();
+  entries.forEach(e=>{hourSet.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
+  const gHours=hourSet.size;
+  const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
+  const rows=BS_DATABASES.map(db=>{
+    const t=totals[db];
+    const hasData=t&&BS_COUNT_FIELDS.some(f=>t[f])||(t&&t.hours>0);
+    if(!hasData)return'';
+    return`<tr><td style="font-weight:700;padding:6px 10px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 10px;">${t[f]||0}</td>`).join('')}<td style="text-align:center;padding:6px 10px;">${t.hours||0}</td><td style="text-align:center;padding:6px 10px;">${t.rate||''}</td></tr>`;
+  }).join('');
+  const totalRow=`<tr style="background:var(--off);font-weight:800;"><td style="padding:8px 10px;">TOTAL</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:8px 10px;">${grand[f]}</td>`).join('')}<td style="text-align:center;padding:8px 10px;">${gHours}</td><td style="text-align:center;padding:8px 10px;">${gRate}</td></tr>`;
+  const emptyRow=rows?'':`<tr><td colspan="10" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries this week</td></tr>`;
+  return`<div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+    <div style="padding:10px 16px;background:var(--navy);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;">${esc(name)}</div>
+    <table class="act-table" style="width:100%;">
+      <thead><tr><th>Database</th>${BS_COUNT_FIELDS.map(f=>`<th style="text-align:center;">${BS_COUNT_LABELS[f]}</th>`).join('')}<th style="text-align:center;">Hours</th><th style="text-align:center;">Rate</th></tr></thead>
+      <tbody>${rows||emptyRow}${rows?totalRow:''}</tbody>
+    </table>
+  </div>`;
+}
+
+async function bsRenderDashboard(){
+  gel('bsDashWeekLabel').textContent='Week ending '+bsFormatNice(_bsWeekEnding);
+  const container=gel('bsDashContent');
+  container.innerHTML='<div style="background:#fff;border-radius:8px;padding:30px;text-align:center;color:var(--muted);">Loading…</div>';
+  const allEntries=await bsFetchWeekAll();
+  // Group by user_email
+  const byUser={};
+  allEntries.forEach(e=>{
+    if(!byUser[e.user_email])byUser[e.user_email]={name:e.user_name,email:e.user_email,entries:[]};
+    byUser[e.user_email].entries.push(e);
+  });
+  const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!users.length){
+    container.innerHTML='<div style="background:#fff;border-radius:8px;padding:40px;text-align:center;color:var(--muted);font-size:13px;">No timesheet entries recorded for this week.</div>';
+    return;
+  }
+  // Per-researcher cards + team total
+  const cards=users.map(u=>{
+    const totals=bsAggregateByDatabase(u.entries);
+    return bsRenderResearcherCard(u.name,totals,u.entries);
+  }).join('');
+  // Team total
+  const teamTotals=bsAggregateByDatabase(allEntries);
+  const teamCard=bsRenderResearcherCard('TEAM TOTAL',teamTotals,allEntries);
+  container.innerHTML=cards+'<div style="height:8px;"></div>'+teamCard;
+}
+
+// Weekly Excel export
+async function bsExportWeek(){
+  if(!(isSuperuser||hasPermission('can_view_birdseye'))){showToast('Permission required','error');return;}
+  const entries=await bsFetchWeekAll();
+  if(!entries.length){showToast('No entries to export for this week','info');return;}
+  // Group by user
+  const byUser={};
+  entries.forEach(e=>{
+    if(!byUser[e.user_email])byUser[e.user_email]={name:e.user_name,email:e.user_email,entries:[]};
+    byUser[e.user_email].entries.push(e);
+  });
+  const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
+  const headers=['Database','Desk','Called','Validated','VM/NR','Refused','Callback','Gone','Hours','Rate'];
+  const aoa=[];
+  aoa.push(['WEEKLY BIRDSEYE REPORT']);
+  aoa.push(['Week ending '+bsFormatNice(_bsWeekEnding)]);
+  aoa.push([]);
+  const merges=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}},{s:{r:1,c:0},e:{r:1,c:headers.length-1}}];
+
+  users.forEach(u=>{
+    const isGeorgia=/georgia/i.test(u.name);
+    // Researcher name row
+    const nameRow=[u.name];
+    if(isGeorgia){while(nameRow.length<11)nameRow.push('');nameRow.push('DATABASE PROGRESS');}
+    else{while(nameRow.length<headers.length)nameRow.push('');}
+    const nameRowIdx=aoa.length;
+    aoa.push(nameRow);
+    merges.push({s:{r:nameRowIdx,c:0},e:{r:nameRowIdx,c:headers.length-1}});
+    // Header row
+    const headerRow=[...headers];
+    if(isGeorgia){while(headerRow.length<11)headerRow.push('');headerRow.push('Database','Total Records','Verified','Progress %');}
+    aoa.push(headerRow);
+    // Per-database rows
+    const totals=bsAggregateByDatabase(u.entries);
+    const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    const hoursAll=new Set();
+    u.entries.forEach(e=>{hoursAll.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
+    BS_DATABASES.forEach(db=>{
+      const t=totals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
+      const row=[db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate];
+      if(isGeorgia){while(row.length<11)row.push('');row.push(db,'','','');}
+      aoa.push(row);
+    });
+    // Total row
+    const gHours=hoursAll.size;
+    const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
+    const totalRow=['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate];
+    if(isGeorgia){while(totalRow.length<11)totalRow.push('');totalRow.push('TOTAL','','','');}
+    aoa.push(totalRow);
+    aoa.push([]);
+  });
+
+  // NEW COMPANIES section
+  aoa.push(['NEW COMPANIES — per researcher']);
+  merges.push({s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:headers.length-1}});
+  aoa.push(['Researcher','Desk','Called','Validated','VM/NR','Refused','Callback','Gone','Hours']);
+  users.forEach(u=>{
+    const nc=u.entries.filter(e=>e.database_name==='New Companies');
+    const totals={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    const hrs=new Set();
+    nc.forEach(e=>{BS_COUNT_FIELDS.forEach(f=>{totals[f]+=(e[f]||0);});hrs.add(e.entry_date+'__'+e.hour_slot);});
+    aoa.push([u.name,totals.desk,totals.called,totals.validated,totals.vm_nr,totals.refused,totals.callback,totals.gone,hrs.size]);
+  });
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges']=merges;
+  ws['!cols']=[{wch:22},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},{wch:2},{wch:18},{wch:14},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'Week '+bsFormatDate(_bsWeekEnding));
+  const fname='Birdseye_Week_ending_'+bsFormatDate(_bsWeekEnding).replace(/-/g,'')+'.xlsx';
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=fname;a.click();
+  showToast('Exported: '+fname,'done');
+}
+
 function bsReadRowCounts(tr){
   const counts={};
   BS_COUNT_FIELDS.forEach(f=>{
@@ -4520,6 +4695,7 @@ function bsRecalcDailySummary(dateStr,liveRow){
 }
 
 function bsRowChanged(dateStr,weekEndStr,hour,tr){
+  if(!bsIsCurrentWeek())return; // guard: read-only on past weeks
   const dbSel=tr.querySelector('select');
   const dbName=dbSel.value;
   const counts=bsReadRowCounts(tr);
