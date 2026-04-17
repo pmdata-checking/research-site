@@ -4603,7 +4603,7 @@ let _dbProgressLoading=false;
 
 function bsFmtVfDate(s){
   if(!s||typeof s!=='string'||s.length!==8)return'—';
-  return s.slice(6,8)+'/'+s.slice(4,6)+'/'+s.slice(0,4);
+  return s;
 }
 function bsFmtPct(v){
   if(v==null||isNaN(v))return'—';
