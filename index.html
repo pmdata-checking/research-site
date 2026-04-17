@@ -519,23 +519,21 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       </div>
       <div class="dash-scroll">
         <div id="bsTimesheet" style="max-width:1400px;margin:0 auto;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:rgba(255,255,255,.05);padding:12px 16px;border-radius:8px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--navy);padding:14px 18px;border-radius:8px;color:#fff;">
             <button class="db-btn" onclick="bsPrevWeek()" style="background:rgba(255,255,255,.15);">← Previous Week</button>
             <div style="flex:1;text-align:center;">
-              <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);">Week Ending</div>
-              <div id="bsWeekEnding" style="font-family:var(--font);font-size:18px;font-weight:800;color:#fff;"></div>
-              <div id="bsResearcherName" style="font-family:var(--font);font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;"></div>
+              <div id="bsWeekEnding" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;"></div>
             </div>
             <button class="db-btn" onclick="bsNextWeek()" style="background:rgba(255,255,255,.15);">Next Week →</button>
           </div>
-          <div id="bsDayTabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,.15);"></div>
+          <div id="bsDayTabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);"></div>
           <div id="bsDayContent"></div>
         </div>
         <div id="bsDashboard" style="max-width:1400px;margin:0 auto;display:none;">
-          <div style="background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.2);border-radius:8px;padding:60px 40px;text-align:center;">
+          <div style="background:#fff;border:1px dashed var(--border);border-radius:8px;padding:60px 40px;text-align:center;">
             <div style="font-size:40px;margin-bottom:16px;">🦅</div>
-            <div style="font-family:var(--font);font-size:16px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:8px;">Birdseye Dashboard coming soon</div>
-            <div style="font-family:var(--font);font-size:12px;color:rgba(255,255,255,.6);">Team productivity analytics will be available in Phase 2.</div>
+            <div style="font-family:var(--font);font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px;">Birdseye Dashboard coming soon</div>
+            <div style="font-family:var(--font);font-size:12px;color:var(--muted);">Team productivity analytics will be available in Phase 2.</div>
           </div>
         </div>
       </div>
@@ -4353,8 +4351,6 @@ async function goToBirdseye(){
   const vt=gel('bsViewToggle');if(vt)vt.style.display=(isSuperuser||hasPermission('can_view_birdseye'))?'':'none';
   gel('bsTimesheet').style.display='';
   gel('bsDashboard').style.display='none';
-  // Researcher name
-  gel('bsResearcherName').textContent=getUserDisplayName()+' — '+currentUser.email;
   // Default week ending = next Friday
   _bsWeekEnding=bsFridayFor(new Date());
   // Default day = today's day if it falls in the week, else Friday
@@ -4377,7 +4373,7 @@ async function bsPrevWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.
 async function bsNextWeek(){_bsWeekEnding=new Date(_bsWeekEnding);_bsWeekEnding.setDate(_bsWeekEnding.getDate()+7);await bsRenderWeek();}
 
 async function bsRenderWeek(){
-  gel('bsWeekEnding').textContent=bsFormatNice(_bsWeekEnding);
+  gel('bsWeekEnding').textContent=getUserDisplayName()+' — Week ending '+bsFormatNice(_bsWeekEnding);
   // Load entries for this week
   const dates=bsDayDates(_bsWeekEnding);
   const startDate=bsFormatDate(dates.fri);
@@ -4421,16 +4417,21 @@ function bsRenderDay(){
   const dateStr=bsFormatDate(date);
   const weekEndStr=bsFormatDate(_bsWeekEnding);
 
-  // Build hour rows
+  // Build hour rows. "called" is read-only (auto = validated+vm_nr+refused+callback+gone)
   const rows=BS_HOURS.map(hour=>{
-    // Find existing entry for this hour (use first one's database or blank)
     const existing=_bsEntries.filter(e=>e.entry_date===dateStr&&e.hour_slot===hour);
     const ent=existing[0]||{database_name:'',desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,notes:''};
-    const rowKey=dateStr+'__'+hour;
+    const cellField=f=>{
+      if(f==='called'){
+        const calc=(ent.validated||0)+(ent.vm_nr||0)+(ent.refused||0)+(ent.callback||0)+(ent.gone||0);
+        return`<td style="padding:4px 6px;"><input type="number" readonly class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;background:var(--off);color:var(--muted);cursor:not-allowed;" data-field="called" value="${calc||''}"></td>`;
+      }
+      return`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="${f}" value="${ent[f]||''}" oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`;
+    };
     return`<tr data-hour="${esc(hour)}">
       <td style="font-size:12px;font-weight:700;white-space:nowrap;padding:6px 8px;">${esc(hour)}</td>
       <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;" onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DATABASES.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
-      ${BS_COUNT_FIELDS.map(f=>`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="${f}" value="${ent[f]||''}" oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`).join('')}
+      ${BS_COUNT_FIELDS.map(cellField).join('')}
       <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}" oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
     </tr>`;
   }).join('');
@@ -4486,43 +4487,62 @@ function bsRenderWeekSummary(container){
     </div>`;
 }
 
-function bsRowChanged(dateStr,weekEndStr,hour,tr){
-  const dbSel=tr.querySelector('select');
-  const dbName=dbSel.value;
+function bsReadRowCounts(tr){
   const counts={};
   BS_COUNT_FIELDS.forEach(f=>{
+    if(f==='called')return; // computed below
     const inp=tr.querySelector('[data-field="'+f+'"]');
     const v=parseInt(inp.value||'0',10);
     counts[f]=isNaN(v)?0:Math.max(0,v);
   });
+  counts.called=(counts.validated||0)+(counts.vm_nr||0)+(counts.refused||0)+(counts.callback||0)+(counts.gone||0);
+  return counts;
+}
+
+function bsRecalcDailySummary(dateStr,liveRow){
+  // Compute per-database totals for the given day, using stored entries plus
+  // the live (unsaved) row values so the summary stays in sync instantly.
+  const dayTotals={};
+  _bsEntries.filter(e=>e.entry_date===dateStr&&e.database_name).forEach(e=>{
+    // Skip the entry that corresponds to the live row — we'll use the live values instead
+    if(liveRow&&e.hour_slot===liveRow.hour&&e.database_name===liveRow.dbName)return;
+    if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});
+  });
+  if(liveRow&&liveRow.dbName){
+    if(!dayTotals[liveRow.dbName])dayTotals[liveRow.dbName]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    BS_COUNT_FIELDS.forEach(f=>{dayTotals[liveRow.dbName][f]+=(liveRow.counts[f]||0);});
+  }
+  const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
+  const container=gel('bsDayContent');
+  const tbody=container&&container.querySelectorAll('tbody')[1];
+  if(tbody)tbody.innerHTML=summaryRows;
+}
+
+function bsRowChanged(dateStr,weekEndStr,hour,tr){
+  const dbSel=tr.querySelector('select');
+  const dbName=dbSel.value;
+  const counts=bsReadRowCounts(tr);
+  // Live-update the read-only Called field
+  const calledInp=tr.querySelector('[data-field="called"]');
+  if(calledInp)calledInp.value=counts.called||'';
   const notes=(tr.querySelector('[data-field="notes"]').value||'').trim();
-  // Skip saving if completely empty
+  // Live daily summary update (includes the unsaved row)
+  bsRecalcDailySummary(dateStr,{hour,dbName,counts});
+  // Skip saving if completely empty or no database chosen
   const isEmpty=!dbName&&BS_COUNT_FIELDS.every(f=>!counts[f])&&!notes;
   const timerKey=dateStr+'__'+hour;
   if(_bsSaveTimers[timerKey])clearTimeout(_bsSaveTimers[timerKey]);
-  if(isEmpty)return;
-  if(!dbName){return;} // require database to save (otherwise nothing to key against)
+  if(isEmpty||!dbName)return;
   _bsSaveTimers[timerKey]=setTimeout(async()=>{
     const payload={user_email:currentUser.email,user_name:getUserDisplayName(),entry_date:dateStr,week_ending:weekEndStr,hour_slot:hour,database_name:dbName,...counts,notes:notes||null,updated_at:new Date().toISOString()};
     const{error}=await sb.from('birdseye_entries').upsert(payload,{onConflict:'user_email,entry_date,hour_slot,database_name'});
     if(error){console.error('Birdseye save error:',error);showToast('Save failed: '+error.message,'error');return;}
-    // Update local entries
     const idx=_bsEntries.findIndex(e=>e.entry_date===dateStr&&e.hour_slot===hour&&e.database_name===dbName);
     if(idx>=0)Object.assign(_bsEntries[idx],payload);
     else _bsEntries.push(payload);
-    // Re-render daily summary only (preserve focus in inputs)
-    const container=gel('bsDayContent');
-    const summarySection=container.querySelector('div[style*="Daily Summary"]');
-    if(summarySection){
-      const dayTotals={};
-      _bsEntries.filter(e=>e.entry_date===dateStr&&e.database_name).forEach(e=>{
-        if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-        BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});
-      });
-      const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
-      const tbody=container.querySelectorAll('tbody')[1];
-      if(tbody)tbody.innerHTML=summaryRows;
-    }
+    // Re-run summary against stored values only (live row now saved)
+    bsRecalcDailySummary(dateStr,null);
   },500);
 }
 
