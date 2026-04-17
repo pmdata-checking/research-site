@@ -4621,6 +4621,7 @@ async function csLoadReport(connectId){
     if(!res.ok)throw new Error(json.error||'Unable to load report — please try again');
     gel('csReportLoading').style.display='none';
     const rpt=json.report||{};
+    console.log('CreditSafe FULL report response:',JSON.stringify(json,null,2));
     const co=rpt.companySummary||rpt.companyIdentification||{};
     const name=co.businessName||co.companyName||rpt.companyName||'';
     const regNo=co.companyRegistrationNumber||co.companyNumber||'';
@@ -4691,6 +4692,14 @@ async function csLoadReport(connectId){
         <div style="display:flex;align-items:center;"><span style="font-size:18px;font-weight:800;color:var(--navy);">${esc(name)}</span>${cpBtn(['Company','COMPANY'],name,'Company')}</div>
         ${regNo?`<div style="display:flex;align-items:center;margin-top:4px;"><span style="font-size:13px;color:var(--muted);">Registration: ${esc(regNo)}</span>${cpBtn(['Company_Number','CO_NUMBER','Company Number'],regNo,'Reg')}</div>`:''}
         <div style="font-size:13px;font-weight:700;${statusCls}margin-top:4px;">${esc(status)}</div>
+        ${(()=>{
+          const ai=rpt.additionalInformation||{};
+          const ei=ai.employeesInformation||ai.employees||{};
+          const bi=rpt.companyIdentification?.basicInformation||{};
+          const emp=ei.numberOfEmployees||ei.employees||ei.count||bi.numberOfEmployees||rpt.companySummary?.numberOfEmployees||ai.numberOfEmployees||'';
+          const empStr=emp?String(emp):'';
+          return empStr?`<div style="display:flex;align-items:center;margin-top:4px;"><span style="font-size:13px;color:var(--muted);">Employees: ${esc(empStr)}</span>${cpBtn(['Co_Employees','CO_EMPLOYEES','Co Employees','Co_Size','CO_SIZE'],empStr,'Employees')}</div>`:'';
+        })()}
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
         <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Registered Address</div>
@@ -4704,13 +4713,18 @@ async function csLoadReport(connectId){
         const ci=rpt.contactInformation||{};
         const csPhone=(ci.mainTelephoneNumber||ci.telephone||ci.phoneNumber||'').trim();
         const csWebsite=(ci.websites?ci.websites[0]:(ci.website||'')).trim();
-        const csEmail=(ci.emailAddress||ci.email||'').trim();
-        const hasContact=csPhone||csWebsite||csEmail;
+        // Collect emails — support both single (emailAddress/email) and array (emailAddresses)
+        let emailList=[];
+        if(Array.isArray(ci.emailAddresses))emailList=ci.emailAddresses.map(e=>typeof e==='string'?e:(e.email||e.address||e.emailAddress||'')).filter(Boolean);
+        else if(ci.emailAddress)emailList=[ci.emailAddress];
+        else if(ci.email)emailList=[ci.email];
+        emailList=emailList.map(e=>String(e).trim()).filter(Boolean);
+        const hasContact=csPhone||csWebsite||emailList.length;
         if(!hasContact)return '';
         let rows='';
         if(csPhone)rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>📞 ${esc(csPhone)}</span>${cpBtn(['Co_Phone','PHONE','Co Phone'],csPhone,'Phone')}</div>`;
         if(csWebsite)rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>🌐 ${esc(csWebsite)}</span>${cpBtn(['website','WEBSITE','Website'],csWebsite,'Website')}</div>`;
-        if(csEmail)rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>✉ ${esc(csEmail)}</span>${cpBtn(["Co_E-mail","CO_EMAIL","Co E-mail"],csEmail,'Email')}</div>`;
+        emailList.forEach(em=>{rows+=`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;"><span>✉ ${esc(em)}</span>${cpBtn(["Co_E-mail","CO_EMAIL","Co E-mail"],em,'Email')}</div>`;});
         return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
           <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Contact Information</div>
           ${rows}
