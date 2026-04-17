@@ -373,7 +373,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       </div>
       <span class="h-user" id="userLabel"></span>
       <button class="hbtn" id="exportBtn" onclick="openModal('exportModal')" style="display:none;">↓ Export</button>
-      <button class="hbtn" id="birdseyeBtn" onclick="goToBirdseye()">🦅 Birdseye</button>
+      <button class="hbtn" id="birdseyeBtn" onclick="goToBirdseye()">🦅 Timesheet</button>
       <button class="hbtn" id="activityBtn" onclick="goToActivity()">📊 Activity</button>
       <button class="hbtn" id="templatesBtn" onclick="goToTemplates()" style="display:none;">✉ Templates</button>
       <button class="hbtn" id="usersBtn" onclick="goToUsers()" style="display:none;">👥 Users</button>
@@ -4319,11 +4319,13 @@ let _bsEntries=[]; // loaded from Supabase for current week
 let _bsSaveTimers={}; // key → timeout id
 
 function bsFridayFor(date){
+  // Returns the Friday that ENDS the week containing `date`.
+  // Week runs Fri -> Thu. The "week ending" Friday is the Friday AFTER the Thursday that ends the week.
+  // So: find the most recent Friday (today if Friday), then add 7.
   const d=new Date(date);d.setHours(0,0,0,0);
-  const day=d.getDay(); // 0=Sun..6=Sat
-  // Find next Friday (or today if Friday)
-  const diff=(5-day+7)%7;
-  d.setDate(d.getDate()+diff);
+  const day=d.getDay(); // 0=Sun..6=Sat, Fri=5
+  const daysBackToFri=(day-5+7)%7; // 0 if today is Friday
+  d.setDate(d.getDate()-daysBackToFri+7);
   return d;
 }
 function bsFormatDate(d){
@@ -4393,7 +4395,8 @@ function bsIsCurrentWeek(){
 }
 
 async function bsRenderWeek(){
-  gel('bsWeekEnding').textContent=getUserDisplayName()+' — Week ending '+bsFormatNice(_bsWeekEnding);
+  const nm=(gel('userLabel')&&gel('userLabel').textContent.trim())||getUserDisplayName();
+  gel('bsWeekEnding').textContent=nm+' — Week ending '+bsFormatNice(_bsWeekEnding);
   // Load entries for this week
   const dates=bsDayDates(_bsWeekEnding);
   const startDate=bsFormatDate(dates.fri);
