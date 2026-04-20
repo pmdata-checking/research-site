@@ -5641,12 +5641,10 @@ async function csLoadReport(connectId){
     const cpBtn=(fieldNames,value,label)=>value?`<button class="user-action-btn" style="font-size:10px;padding:3px 8px;margin-left:8px;" onclick="csCopyField(this,${JSON.stringify(fieldNames).replace(/"/g,'&quot;')},'${esc(value.replace(/'/g,"\\'"))}')">→ Copy</button>`:'';
     // Directors
     const dirs=(rpt.directors?.currentDirectors||rpt.directors||[]);
-    console.log('CreditSafe directors raw:',JSON.stringify(dirs?.slice(0,3)));
     let dirsHtml='<div style="color:#999;font-style:italic;font-size:13px;padding:8px 0;">No directors found</div>';
     if(dirs.length){
       // Store parsed directors for copy
       const parsedDirs=dirs.map(d=>{
-        console.log('Director object:',JSON.stringify(d));
         // Extract first name and surname from all possible API formats
         let fn=d.firstName||d.first_name||'';
         let sn=d.surname||d.lastName||d.last_name||'';
