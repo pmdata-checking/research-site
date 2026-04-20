@@ -25,6 +25,9 @@ body{font-family:var(--body);background:var(--off);color:var(--text);height:100v
 .ld-spin{width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--green2);border-radius:50%;animation:spin .8s linear infinite;}
 .ld-text{font-size:11px;font-weight:600;color:rgba(255,255,255,.4);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font);}
 @keyframes spin{to{transform:rotate(360deg);}}
+.progress-bar{height:6px;background:var(--off);border-radius:3px;overflow:hidden;position:relative;}
+.progress-bar-fill{position:absolute;top:0;left:0;height:100%;width:30%;background:linear-gradient(90deg,var(--navy),var(--teal),var(--navy));border-radius:3px;animation:progress-slide 1.4s ease-in-out infinite;}
+@keyframes progress-slide{0%{left:-30%;}100%{left:100%;}}
 #loginWrap{display:none;align-items:center;justify-content:center;flex:1;background:linear-gradient(135deg,var(--navy) 0%,#0d2236 100%);}
 .lcard{background:#fff;border-radius:10px;padding:48px 52px;width:420px;box-shadow:0 24px 64px rgba(0,0,0,.32);text-align:center;}
 .lcard-logo{font-family:var(--font);font-size:28px;font-weight:800;color:var(--navy);}
@@ -4651,7 +4654,7 @@ function bsFmtNum(n){
 
 function bsRenderDbProgressBody(){
   if(_dbProgressLoading){
-    return'<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">⏳ Loading Verfile data…</div>';
+    return'<div style="padding:24px;"><div class="progress-bar"><div class="progress-bar-fill"></div></div><div style="text-align:center;color:var(--muted);font-size:12px;font-family:var(--font);font-weight:600;letter-spacing:.05em;margin-top:10px;">Loading Verfile data…</div></div>';
   }
   if(_dbProgressError){
     return`<div style="padding:20px;color:#b00020;font-size:13px;">⚠️ Failed to load Verfile data: ${esc(_dbProgressError)}</div>`;
