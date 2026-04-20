@@ -452,10 +452,13 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <button class="tb-go" onclick="renderCB()">Go</button>
           <button class="tb-btn" onclick="document.getElementById('cbSearch').value='';renderCB()">✕</button>
           <div class="tb-spacer"></div>
+          <button class="tb-btn" id="checkVerfileCbBtn" style="display:none;" onclick="checkVerfile(true)">🔍 Check Verfile</button>
+          <button class="tb-btn" id="removeVerfileCbBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="removeSelectedVerfile()">🗑 Remove Selected</button>
           <button class="tb-btn" onclick="exportList('Callback')">↓ Export Callbacks</button>
           <button class="tb-btn" id="testExportCbBtn" style="display:none;" onclick="exportTestSheet()">↓ Export Test Sheet</button>
           <button class="tb-btn" id="deleteCbBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="deleteList('Callback')">🗑 Delete Entire List</button>
         </div>
+        <div id="verfileProgressCb" style="display:none;padding:6px 14px;background:#fff;border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-bar-fill"></div></div><div style="text-align:center;color:var(--muted);font-size:11px;font-family:var(--font);font-weight:600;letter-spacing:.05em;margin-top:6px;">Checking Verfile…</div></div>
         <div class="list-scroll"><table class="list-table"><thead><tr id="cbHead"></tr></thead><tbody id="cbBody"></tbody></table></div>
       </div>
       <div class="screen" id="pview-done" style="flex-direction:column;">
@@ -1506,6 +1509,7 @@ async function openProject(projId,initialTab){
   const teDn=gel('testExportDnBtn');if(teDn)teDn.style.display=isSuperuser?'inline-block':'none';
   const dupBtn=gel('checkDupBtn');if(dupBtn)dupBtn.style.display=isSuperuser?'inline-block':'none';
   const vfBtn=gel('checkVerfileBtn');if(vfBtn)vfBtn.style.display=hasPermission('can_check_verfile')?'inline-block':'none';
+  const vfCbBtn=gel('checkVerfileCbBtn');if(vfCbBtn)vfCbBtn.style.display=hasPermission('can_check_verfile')?'inline-block':'none';
   gel('exportModalTitle').textContent='Export — '+currentProject.name;
   // Rename "Ready to Research" tab to "To Call" for New Records companion projects
   const isNewRecProj=currentProject.name.endsWith(' — New Records');
@@ -1516,9 +1520,12 @@ async function openProject(projId,initialTab){
   const startTab=_pendingProjTab||'queue';
   _pendingProjTab=null;
   switchProjTab(startTab);updateCounts();trackPresence();
-  // Reset verfile state and kick off a background check when the Ready list is active
+  // Reset verfile state and kick off a background check — matched refs cover
+  // both Ready and Callback records in one call
   _verfileMatches={};_verfileSelected.clear();updateVerfileRemoveBtn();
-  if(startTab==='queue'&&hasPermission('can_check_verfile'))setTimeout(()=>checkVerfile(false),200);
+  if(hasPermission('can_check_verfile')&&(startTab==='queue'||startTab==='callbacks')){
+    setTimeout(()=>checkVerfile(false),200);
+  }
 }
 
 function goToDashboard(){
@@ -1844,16 +1851,19 @@ async function checkVerfile(showToastOnResult){
     if(showToastOnResult)showToast('You do not have permission to check Verfile','error');
     return;
   }
-  const readyRecs=records.filter(r=>r._status==='Ready'&&r.project_id===currentProject.id);
-  const refs=[...new Set(readyRecs.map(recordRef).filter(Boolean))];
-  if(!refs.length){_verfileMatches={};_verfileSelected.clear();if(_currentProjTabIsQueue())renderQ();return;}
-  // Progress UI (manual click only)
-  const btn=gel('checkVerfileBtn');
-  const progress=gel('verfileProgress');
-  let originalLabel='';
+  // Include both Ready and Callback records — one fetch covers both tabs
+  const subjectRecs=records.filter(r=>(r._status==='Ready'||r._status==='Callback')&&r.project_id===currentProject.id);
+  const refs=[...new Set(subjectRecs.map(recordRef).filter(Boolean))];
+  if(!refs.length){_verfileMatches={};_verfileSelected.clear();renderQ();renderCB();return;}
+  // Progress UI (manual click only) — toggle both tabs' buttons + progress bars
+  const btn1=gel('checkVerfileBtn'),btn2=gel('checkVerfileCbBtn');
+  const prog1=gel('verfileProgress'),prog2=gel('verfileProgressCb');
+  const labels={};
   if(showToastOnResult){
-    if(btn){originalLabel=btn.textContent;btn.disabled=true;btn.textContent='⏳ Checking…';}
-    if(progress)progress.style.display='';
+    if(btn1){labels.btn1=btn1.textContent;btn1.disabled=true;btn1.textContent='⏳ Checking…';}
+    if(btn2){labels.btn2=btn2.textContent;btn2.disabled=true;btn2.textContent='⏳ Checking…';}
+    if(prog1)prog1.style.display='';
+    if(prog2)prog2.style.display='';
   }
   try{
     const res=await fetch('https://checking.prospectmanager.co.uk/checking/api/verfile-check/',{
@@ -1871,8 +1881,9 @@ async function checkVerfile(showToastOnResult){
     _verfileSelected=new Set();
     // Silently update each matched record's LAST_UP when the Verfile date is newer.
     // In-memory update + Supabase write. Done in parallel, no toast/confirmation.
-    syncVerfileLastUpdates(readyRecs).catch(err=>console.warn('Verfile LAST_UP sync failed:',err));
-    if(_currentProjTabIsQueue())renderQ();
+    syncVerfileLastUpdates(subjectRecs).catch(err=>console.warn('Verfile LAST_UP sync failed:',err));
+    // Refresh both Ready and Callbacks views so whichever is visible reflects the check
+    renderQ();renderCB();
     if(showToastOnResult){
       const n=Object.keys(_verfileMatches).length;
       showToast(n?(n+' recently-verified record'+(n===1?'':'s')+' flagged'):'No recently-verified matches found',n?'info':'done');
@@ -1881,8 +1892,10 @@ async function checkVerfile(showToastOnResult){
     if(showToastOnResult)showToast('Verfile check error: '+(err.message||err),'error');
   }finally{
     if(showToastOnResult){
-      if(btn){btn.disabled=false;btn.textContent=originalLabel||'🔍 Check Verfile';}
-      if(progress)progress.style.display='none';
+      if(btn1){btn1.disabled=false;btn1.textContent=labels.btn1||'🔍 Check Verfile';}
+      if(btn2){btn2.disabled=false;btn2.textContent=labels.btn2||'🔍 Check Verfile';}
+      if(prog1)prog1.style.display='none';
+      if(prog2)prog2.style.display='none';
     }
   }
 }
@@ -1935,33 +1948,47 @@ function _currentProjTabIsQueue(){
   return qs&&qs.classList.contains('active');
 }
 
+// Which list-status does the Select-All checkbox on the currently active tab belong to?
+function _verfileActiveStatus(){
+  const cbActive=gel('pview-callbacks')&&gel('pview-callbacks').classList.contains('active');
+  return cbActive?'Callback':'Ready';
+}
 function toggleVerfileRowSelect(recId,checked){
   if(checked)_verfileSelected.add(recId);else _verfileSelected.delete(recId);
   updateVerfileRemoveBtn();
   const master=gel('verfileSelectAll');
   if(master){
+    const status=_verfileActiveStatus();
     const allIds=Object.keys(_verfileMatches).map(ref=>{
-      const rec=records.find(r=>recordRef(r)===ref&&r._status==='Ready');
+      const rec=records.find(r=>recordRef(r)===ref&&r._status===status&&r.project_id===currentProject?.id);
       return rec?rec.id:null;
     }).filter(Boolean);
     master.checked=allIds.length>0&&allIds.every(id=>_verfileSelected.has(id));
   }
 }
 function toggleVerfileSelectAll(checked){
-  _verfileSelected=new Set();
-  if(checked){
-    records.forEach(r=>{
-      if(r._status!=='Ready'||!currentProject||r.project_id!==currentProject.id)return;
-      const ref=recordRef(r);
-      if(ref&&_verfileMatches[ref])_verfileSelected.add(r.id);
-    });
-  }
-  renderQ();
+  // Scope to the currently visible tab's status (Ready or Callback)
+  const status=_verfileActiveStatus();
+  // Keep selections from the OTHER tab intact; only flip this tab's items
+  const thisTabIds=new Set();
+  records.forEach(r=>{
+    if(r._status!==status||!currentProject||r.project_id!==currentProject.id)return;
+    const ref=recordRef(r);
+    if(ref&&_verfileMatches[ref])thisTabIds.add(r.id);
+  });
+  if(checked){thisTabIds.forEach(id=>_verfileSelected.add(id));}
+  else {thisTabIds.forEach(id=>_verfileSelected.delete(id));}
+  if(status==='Callback')renderCB();else renderQ();
 }
 function updateVerfileRemoveBtn(){
-  const btn=gel('removeVerfileBtn');
-  if(btn)btn.style.display=_verfileSelected.size>0?'':'none';
-  if(btn)btn.textContent='🗑 Remove Selected ('+_verfileSelected.size+')';
+  const count=_verfileSelected.size;
+  const label='🗑 Remove Selected ('+count+')';
+  ['removeVerfileBtn','removeVerfileCbBtn'].forEach(id=>{
+    const btn=gel(id);
+    if(!btn)return;
+    btn.style.display=count>0?'':'none';
+    btn.textContent=label;
+  });
 }
 async function removeSelectedVerfile(){
   if(!_verfileSelected.size)return;
@@ -1976,7 +2003,7 @@ async function removeSelectedVerfile(){
     const rec=records.find(r=>r.id===id); // will be undefined since removed
     // cleanup not strictly needed — _verfileMatches keyed by ref not id
   });
-  updateCounts();renderQ();
+  updateCounts();renderQ();renderCB();
   showToast('Removed '+ids.length+' record'+(ids.length===1?'':'s'),'done');
 }
 function renderCB(){
@@ -1992,7 +2019,7 @@ function renderCB(){
     if(!tb)return 1;
     return _cbSortAsc?ta.localeCompare(tb):tb.localeCompare(ta);
   });
-  renderTable(gel('cbHead'),gel('cbBody'),rows,q,true);
+  renderTable(gel('cbHead'),gel('cbBody'),rows,q,true,hasPermission('can_check_verfile'));
 }
 
 function toggleCbSort(){_cbSortAsc=!_cbSortAsc;renderCB();}
