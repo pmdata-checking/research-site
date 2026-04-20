@@ -4571,14 +4571,21 @@ async function bsFetchWeekAll(){
 // Aggregate entries into per-database totals with hours and rate
 function bsAggregateByDatabase(entries){
   const out={};
-  BS_DATABASES.forEach(db=>{out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set()};});
+  BS_DATABASES.forEach(db=>{out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set(),_historicalHours:0};});
   entries.forEach(e=>{
     const db=e.database_name;
-    if(!out[db])out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set()};
+    if(!out[db])out[db]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,_hours:new Set(),_historicalHours:0};
     BS_COUNT_FIELDS.forEach(f=>{out[db][f]+=(e[f]||0);});
-    out[db]._hours.add(e.entry_date+'__'+e.hour_slot);
+    // Historical rows use a synthetic hour_slot; read the real hours from the column.
+    // Regular hourly rows continue to contribute via distinct (date,hour_slot) pairs.
+    if(e.hour_slot==='historical')out[db]._historicalHours+=(e.hours||0);
+    else out[db]._hours.add(e.entry_date+'__'+e.hour_slot);
   });
-  Object.values(out).forEach(t=>{t.hours=t._hours.size;t.rate=t.hours>0?(t.validated/t.hours).toFixed(2):'';delete t._hours;});
+  Object.values(out).forEach(t=>{
+    t.hours=t._hours.size+t._historicalHours;
+    t.rate=t.hours>0?(t.validated/t.hours).toFixed(2):'';
+    delete t._hours;delete t._historicalHours;
+  });
   return out;
 }
 
