@@ -1032,7 +1032,7 @@ function mergeRecord(r){
 }
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
-let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[];
+let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={};
 let _impersonating=false,_realRole=null,_realPerms=null;
 let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
@@ -1412,10 +1412,11 @@ async function openProject(projId){
   let overlay=gel('projLoadingOverlay');
   if(!overlay){overlay=document.createElement('div');overlay.id='projLoadingOverlay';overlay.style.cssText='position:fixed;inset:0;background:rgba(26,58,92,0.85);display:flex;align-items:center;justify-content:center;z-index:900;flex-direction:column;gap:14px;';overlay.innerHTML='<div class="ld-spin"></div><div style="font-family:var(--font);font-size:11px;font-weight:600;color:rgba(255,255,255,.6);letter-spacing:.1em;text-transform:uppercase;">Loading project…</div>';document.body.appendChild(overlay);}
   overlay.style.display='flex';
-  const[projR,recR,lockR]=await Promise.all([
+  const[projR,recR,lockR,cbLogR]=await Promise.all([
     sb.from('projects').select('*').eq('id',projId).single(),
     sb.from('records').select('*').eq('project_id',projId).order('original_order',{ascending:true}),
     sb.from('locks').select('*'),
+    sb.from('activity_log').select('record_id,created_at').eq('project_id',projId).eq('action','Callback').order('created_at',{ascending:false}),
   ]);
   overlay.style.display='none';
   if(projR.error){showToast('Error loading project','error');return;}
@@ -1423,6 +1424,11 @@ async function openProject(projId){
   projFields=Array.isArray(currentProject.fields)?currentProject.fields:JSON.parse(currentProject.fields||'[]');
   records=(recR.data||[]).map(mergeRecord);
   locks={};(lockR.data||[]).forEach(l=>{locks[l.record_id]=l;});
+  // Cache latest Callback timestamp per record for sort order on the Callback tab
+  _callbackTimestamps={};
+  (cbLogR.data||[]).forEach(row=>{
+    if(!_callbackTimestamps[row.record_id])_callbackTimestamps[row.record_id]=row.created_at;
+  });
   gel('backBtn').style.display='flex';
   gel('exportBtn').style.display=hasPermission('can_export')?'inline-block':'none';
   const pnl=gel('projNameLabel');if(pnl)pnl.textContent=projR.data.name;
@@ -1689,7 +1695,20 @@ function renderTable(hEl,bEl,rows,searchTerm){
   });
 }
 function renderQ(){const q=val('qSearch').toLowerCase();const rows=records.filter(r=>r._status==='Ready'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));renderTable(gel('qHead'),gel('qBody'),rows,q);}
-function renderCB(){const q=val('cbSearch').toLowerCase();const rows=records.filter(r=>r._status==='Callback'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));renderTable(gel('cbHead'),gel('cbBody'),rows,q);}
+function renderCB(){
+  const q=val('cbSearch').toLowerCase();
+  const rows=records.filter(r=>r._status==='Callback'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));
+  // Sort by most-recent Callback timestamp ascending (oldest at top, freshest at bottom).
+  // Records with no logged Callback action are treated as oldest.
+  rows.sort((a,b)=>{
+    const ta=_callbackTimestamps[a.id],tb=_callbackTimestamps[b.id];
+    if(!ta&&!tb)return 0;
+    if(!ta)return -1;
+    if(!tb)return 1;
+    return ta.localeCompare(tb);
+  });
+  renderTable(gel('cbHead'),gel('cbBody'),rows,q);
+}
 function renderDone(){const q=val('dnSearch').toLowerCase();const rows=records.filter(r=>r._status==='Done'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));renderTable(gel('dnHead'),gel('dnBody'),rows,q);}
 
 function startNextRecord(){
@@ -2759,6 +2778,8 @@ async function doTagRec(status){
   // Log activity for Done and Callback actions
   if(status==='Done'||status==='Callback'){
     await logActivity(status, r);
+    // Keep the Callback sort cache current so the record slides to the bottom
+    if(status==='Callback'&&r.id)_callbackTimestamps[r.id]=new Date().toISOString();
   }
 
   showToast(status==='Done'?'Marked as Done':status==='Callback'?'Moved to Callbacks':'Re-queued',status==='Done'?'done':status==='Callback'?'callback':'info');
