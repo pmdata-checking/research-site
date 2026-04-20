@@ -7,6 +7,7 @@
 <link rel="icon" type="image/jpeg" href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDwaiiiu88EKKKKACiiigAooooAKsabAtzqNpBJkJLMkbY64LAH+dV6u6H/AMhrT/8Ar5i/9DFZ1W1Btdioq8kep674N8B6HrMOl6lqGrw3MwDIcgoAzFQSwXjkVi3vgWy0fx9a6JqMtxNp95GZY7lJBG8SAMWLcEHG056cc12vxLvfCFh4tt5/EVlqF1qEcKvGISPKKh22gjIyc5rh9a8UyeJtR13WvJNvBa6a1pbIWyymVwmSfUhnP4V8TltbHV6UanNPllHVytbmbSi4W1336Hq1o0oyasrp9O3W5zvj7QovDvim7061aR7dAjxNIQWKsoPJAHfNbHhPwjZXXhbVdf12S4S2tot8EMDhXl5IySQcAsNo+h9K2PHNhHrt54c1m4dorCbSEnvJh1VYzggf7RLBQPUio9U1Bv8AhU11duiwnV9RWKKJekcEIwqD2G3HvknvXpfXq9bCUKcZWm3GMn1unaS9WlJvsvVGHsYRqSk1pq1/XzR5pKVMjGNSiE8KW3YHpnvTaKK+nWhwBUtnOba7gnVQxikWQA98EHH6VFVvSLqGy1S1ubq0jvIIpA728hwsgH8JqanwPS/l3HHdGv458US+LdYTUJ7WO2ZIhFsjYsCASc5P+9UFtrFrB4eutMGm7nuWSR7j7QwbcmduBjGPmPH61Yute0yWy1SGPw9Zxy3d2txDKHObdARmNeOhwfT7x9qsXXibSZrzV5o/C9jFHeWqwQRhzi2cDBkXjqevboPfPlwp8lKNGNBqMbWXMulrfa83v/L5o6HK8nJzV35f8D+rlO98UXl54Z0vQpVAsrJix2sQ0uWJAY9sZIH1zVnX/FUOq+HNP0iPSktYbDPkOlwzHn7xYEfMT+FSW3ifSYr7S55PC9hJHaWht5oi5xcOR/rG46/n1PPTFe01/TYbLSYZPD1nLJZ3TTzysxzcoScRtx0GR6/dHHXMqik4yWHaabkveW75rv4tfn/NbZMfPuufdW29PL+rHN0Va1a5hvdTurm2tY7OGWRnS3jOVjBP3RVWvXi24ptWZytWegUUUVQgooooAKKKKACiiigD/9k=">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600&family=Libre+Baskerville:ital@1&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
@@ -522,6 +523,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <button class="db-btn" id="bsViewTimesheet" onclick="bsShowView('timesheet')" style="display:none;background:rgba(255,255,255,.15);">📝 Timesheet</button>
         <button class="db-btn" id="bsViewDashboard" onclick="bsShowView('dashboard')" style="display:none;background:rgba(255,255,255,.15);">📊 Dashboard</button>
         <button class="db-btn" id="bsViewYtd" onclick="bsShowView('ytd')" style="display:none;background:rgba(255,255,255,.15);">📅 YTD</button>
+        <button class="db-btn" id="bsViewCharts" onclick="bsShowView('charts')" style="display:none;background:rgba(255,255,255,.15);">📈 Charts</button>
         <button class="db-btn" id="bsExportBtn" onclick="bsExportWeek()" style="display:none;background:rgba(255,255,255,.15);">↓ Export Week</button>
         <button class="db-btn" id="bsExportYtdBtn" onclick="bsExportYtd()" style="display:none;background:rgba(255,255,255,.15);">↓ Export YTD</button>
       </div>
@@ -551,6 +553,12 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
             <div style="flex:1;text-align:center;"><div id="bsYtdLabel" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;"></div></div>
           </div>
           <div id="bsYtdContent"></div>
+        </div>
+        <div id="bsCharts" style="max-width:1400px;margin:0 auto;display:none;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--navy);padding:14px 18px;border-radius:8px;color:#fff;">
+            <div style="flex:1;text-align:center;"><div id="bsChartsLabel" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;">Charts</div></div>
+          </div>
+          <div id="bsChartsContent"></div>
         </div>
       </div>
     </div>
@@ -4502,6 +4510,7 @@ async function goToBirdseye(){
   const vtTs=gel('bsViewTimesheet');if(vtTs)vtTs.style.display=canView?'':'none';
   const vtDb=gel('bsViewDashboard');if(vtDb)vtDb.style.display=canView?'':'none';
   const vtYt=gel('bsViewYtd');if(vtYt)vtYt.style.display=canView?'':'none';
+  const vtCh=gel('bsViewCharts');if(vtCh)vtCh.style.display=canView?'':'none';
   const xb=gel('bsExportBtn');if(xb)xb.style.display=canView?'':'none';
   const xyt=gel('bsExportYtdBtn');if(xyt)xyt.style.display=canView?'':'none';
   // Default week ending = next Friday
@@ -4520,24 +4529,27 @@ async function bsShowView(view){
   gel('bsTimesheet').style.display=view==='timesheet'?'':'none';
   gel('bsDashboard').style.display=view==='dashboard'?'':'none';
   gel('bsYtd').style.display=view==='ytd'?'':'none';
+  gel('bsCharts').style.display=view==='charts'?'':'none';
   // Highlight the active toolbar button
-  [['bsViewTimesheet','timesheet'],['bsViewDashboard','dashboard'],['bsViewYtd','ytd']].forEach(([id,v])=>{
+  [['bsViewTimesheet','timesheet'],['bsViewDashboard','dashboard'],['bsViewYtd','ytd'],['bsViewCharts','charts']].forEach(([id,v])=>{
     const b=gel(id);if(!b)return;
     b.style.background=v===view?'var(--teal)':'rgba(255,255,255,.15)';
   });
-  // Show/hide the matching export button
+  // Show/hide the matching export button (no export for Charts)
   const xb=gel('bsExportBtn'),xyt=gel('bsExportYtdBtn');
   const canView=isSuperuser||hasPermission('can_view_birdseye');
-  if(xb)xb.style.display=(canView&&view!=='ytd')?'':'none';
+  if(xb)xb.style.display=(canView&&(view==='timesheet'||view==='dashboard'))?'':'none';
   if(xyt)xyt.style.display=(canView&&view==='ytd')?'':'none';
   if(view==='timesheet')await bsRenderWeek();
   else if(view==='dashboard')await bsRenderDashboard();
   else if(view==='ytd')await bsRenderYtd();
+  else if(view==='charts')await bsRenderCharts();
 }
 
 async function bsRefresh(){
   if(_bsCurrentView==='dashboard')await bsRenderDashboard();
   else if(_bsCurrentView==='ytd')await bsRenderYtd();
+  else if(_bsCurrentView==='charts')await bsRenderCharts();
   else await bsRenderWeek();
 }
 
@@ -4971,6 +4983,160 @@ async function bsRenderYtd(){
   const teamTotals=bsAggregateByDatabase(allEntries);
   const teamCard=bsRenderResearcherCard('TEAM TOTAL (YTD)',teamTotals,allEntries);
   container.innerHTML=cards+'<div style="height:8px;"></div>'+teamCard+'<div style="height:16px;"></div>'+bsRenderDbProgressShell();
+}
+
+// ── CHARTS VIEW ────────────────────────────────────────────
+const BS_CHART_DB_COLOURS={
+  'WindowBASE':'#29a9e1',
+  'Sealed Units':'#29a9e1',
+  'High End':'#6b6b2a',
+  'Builders Merchants':'#8b1a4a',
+  'Specifiers':'#d4611a',
+  'Other':'#888888'
+};
+const BS_CHART_RESEARCHER_COLOURS={
+  'gavin@prospectmanager.co.uk':'#004563',
+  'georgia@prospectmanager.co.uk':'#5a9e2f',
+  'tracy@prospectmanager.co.uk':'#d4611a'
+};
+let _bsChartInstances={}; // keyed by canvas id
+
+function bsDestroyCharts(){
+  Object.values(_bsChartInstances).forEach(c=>{try{c.destroy();}catch(e){}});
+  _bsChartInstances={};
+}
+
+// ISO week number (1-53) for a date, with Monday as week start.
+function bsIsoWeek(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dayNum=(t.getUTCDay()+6)%7; // Mon=0..Sun=6
+  t.setUTCDate(t.getUTCDate()-dayNum+3);
+  const firstThu=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  const firstThuDay=(firstThu.getUTCDay()+6)%7;
+  firstThu.setUTCDate(firstThu.getUTCDate()-firstThuDay+3);
+  return 1+Math.round((t-firstThu)/(7*24*3600*1000));
+}
+
+async function bsRenderCharts(){
+  const container=gel('bsChartsContent');
+  container.innerHTML='<div style="background:#fff;border-radius:8px;padding:30px;"><div class="progress-bar"><div class="progress-bar-fill"></div></div><div style="text-align:center;color:var(--muted);font-size:12px;font-family:var(--font);font-weight:600;letter-spacing:.05em;margin-top:10px;">Loading charts…</div></div>';
+  bsDestroyCharts();
+
+  const entries=await bsFetchYtdAll(); // already excludes BS_EXCLUDE_EMAILS (Robert)
+  if(!entries.length){
+    container.innerHTML='<div style="background:#fff;border-radius:8px;padding:40px;text-align:center;color:var(--muted);font-size:13px;">No entries recorded year to date.</div>';
+    return;
+  }
+
+  // Compute a canonical week number from the week_ending date (use ISO week of the Fri)
+  function weekKeyFor(e){
+    // week_ending is the Friday of the week. ISO week of that Friday.
+    const d=new Date(e.week_ending);
+    return bsIsoWeek(d);
+  }
+
+  // All distinct week numbers in data, sorted ascending
+  const weekNums=[...new Set(entries.map(weekKeyFor))].sort((a,b)=>a-b);
+  const weekLabels=weekNums.map(w=>'Week '+w);
+
+  // ── Chart 1 data: Stacked validated per database per week ──
+  const dbOrder=['WindowBASE','Sealed Units','High End','Builders Merchants','Specifiers','Other'];
+  const db1Datasets=dbOrder.map(db=>{
+    const data=weekNums.map(w=>{
+      return entries.filter(e=>weekKeyFor(e)===w&&e.database_name===db).reduce((s,e)=>s+(e.validated||0),0);
+    });
+    return{label:db,data,backgroundColor:BS_CHART_DB_COLOURS[db]||'#999',borderColor:'rgba(255,255,255,.5)',borderWidth:1};
+  });
+
+  // ── Chart 2 data: Cumulative called per researcher across weeks ──
+  const researchers=[...new Set(entries.map(e=>e.user_email))].sort((a,b)=>{
+    const order=['gavin','georgia','tracy'];
+    const ai=order.findIndex(n=>a.startsWith(n));
+    const bi=order.findIndex(n=>b.startsWith(n));
+    return(ai<0?99:ai)-(bi<0?99:bi);
+  });
+  function displayName(email){
+    const row=entries.find(e=>e.user_email===email);
+    return row?(row.user_name||email):email;
+  }
+  const db2Datasets=researchers.map(email=>{
+    let running=0;
+    const data=weekNums.map(w=>{
+      const called=entries.filter(e=>weekKeyFor(e)===w&&e.user_email===email).reduce((s,e)=>s+(e.called||0),0);
+      running+=called;
+      return running;
+    });
+    const colour=BS_CHART_RESEARCHER_COLOURS[email.toLowerCase()]||'#666';
+    return{label:displayName(email),data,borderColor:colour,backgroundColor:colour,tension:.25,fill:false,pointRadius:3};
+  });
+
+  // ── Chart 3 data: Weekly validation rate (validated/hours) per researcher ──
+  // Hours per (email, week): historical rows contribute their `hours` column directly;
+  // real hourly rows contribute distinct (entry_date, hour_slot) pairs.
+  function hoursFor(subset){
+    let h=0;const hs=new Set();
+    subset.forEach(e=>{
+      if(e.hour_slot==='historical')h+=(e.hours||0);
+      else hs.add(e.entry_date+'__'+e.hour_slot);
+    });
+    return h+hs.size;
+  }
+  const db3Datasets=researchers.map(email=>{
+    const data=weekNums.map(w=>{
+      const subset=entries.filter(e=>weekKeyFor(e)===w&&e.user_email===email);
+      const h=hoursFor(subset);
+      if(h<=0)return null;
+      const v=subset.reduce((s,e)=>s+(e.validated||0),0);
+      return +(v/h).toFixed(2);
+    });
+    const colour=BS_CHART_RESEARCHER_COLOURS[email.toLowerCase()]||'#666';
+    return{label:displayName(email),data,borderColor:colour,backgroundColor:colour,tension:.25,fill:false,spanGaps:true,pointRadius:3};
+  });
+
+  // Render the HTML skeleton with three canvases
+  container.innerHTML=`
+    <div style="background:#fff;border-radius:8px;padding:20px;margin-bottom:16px;">
+      <div style="font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--navy);margin-bottom:12px;">Weekly Validated Records by Database</div>
+      <div style="position:relative;height:380px;"><canvas id="bsChart1"></canvas></div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:20px;margin-bottom:16px;">
+      <div style="font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--navy);margin-bottom:12px;">Cumulative Called Records by Researcher</div>
+      <div style="position:relative;height:360px;"><canvas id="bsChart2"></canvas></div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:20px;margin-bottom:16px;">
+      <div style="font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--navy);margin-bottom:12px;">Weekly Validation Rate (Validated per Hour)</div>
+      <div style="position:relative;height:360px;"><canvas id="bsChart3"></canvas></div>
+    </div>`;
+
+  // Build the charts
+  const commonOpts={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false}};
+
+  _bsChartInstances.c1=new Chart(gel('bsChart1'),{
+    type:'bar',
+    data:{labels:weekLabels,datasets:db1Datasets},
+    options:{...commonOpts,
+      scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Validated records'}}},
+      plugins:{legend:{position:'bottom'},tooltip:{}}
+    }
+  });
+
+  _bsChartInstances.c2=new Chart(gel('bsChart2'),{
+    type:'line',
+    data:{labels:weekLabels,datasets:db2Datasets},
+    options:{...commonOpts,
+      scales:{y:{beginAtZero:true,title:{display:true,text:'Cumulative called'}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+
+  _bsChartInstances.c3=new Chart(gel('bsChart3'),{
+    type:'line',
+    data:{labels:weekLabels,datasets:db3Datasets},
+    options:{...commonOpts,
+      scales:{y:{beginAtZero:true,title:{display:true,text:'Validated per hour'}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
 }
 
 async function bsExportYtd(){
