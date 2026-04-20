@@ -1189,6 +1189,22 @@ async function loadProjects(){
     const total=(p.ready_count||0)+(p.callback_count||0)+(p.done_count||0);
     return total>0;
   });
+  // Per-project max callback days-since-last-action (for dashboard card alerts)
+  try{
+    const[cbRecR,cbActR]=await Promise.all([
+      sb.from('records').select('id,project_id').eq('_status','Callback'),
+      sb.from('activity_log').select('record_id,created_at').eq('action','Callback').order('created_at',{ascending:false})
+    ]);
+    const latestByRec={};
+    (cbActR.data||[]).forEach(row=>{if(!latestByRec[row.record_id])latestByRec[row.record_id]=row.created_at;});
+    const maxDaysByProj={};
+    (cbRecR.data||[]).forEach(r=>{
+      const ts=latestByRec[r.id];
+      const d=ts?daysAgo(ts):999; // no log entry → treat as 5+ days
+      if(maxDaysByProj[r.project_id]==null||d>maxDaysByProj[r.project_id])maxDaysByProj[r.project_id]=d;
+    });
+    projects.forEach(p=>{p.max_callback_days=maxDaysByProj[p.id]||0;});
+  }catch(e){console.warn('callback overdue scan failed:',e);}
 }
 
 async function createProject(){
@@ -1328,10 +1344,20 @@ function renderDashboard(){
     const changeFamily=isPinned&&isSuperuser?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;">${famLabel||'Set Family'}</button>`:'';
     const priorityBtn=isSuperuser?`<button onclick="togglePriority('${p.id}',${isPriority?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPriority?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPriority?'Remove priority':'Set as priority'}">${isPriority?'⚡ Priority':'⚡'}</button>`:'';
     const statClick=tab=>`onclick="event.stopPropagation();openProject('${p.id}','${tab}')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"`;
+    // Callback overdue highlight
+    const maxD=p.max_callback_days||0;
+    const hasCallbacks=(p.callback_count||0)>0;
+    let cbBoxStyle='cursor:pointer;transition:background .15s;';
+    let cbOver='';
+    let cbOut='';
+    if(hasCallbacks&&maxD>=5){cbBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';cbOver="this.style.background='#ffcfcf'";cbOut="this.style.background='#ffe4e4'";}
+    else if(hasCallbacks&&maxD>=3){cbBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';cbOver="this.style.background='#fff1a3'";cbOut="this.style.background='#fff9c4'";}
+    else{cbOver="this.style.background='var(--hover)'";cbOut="this.style.background=''";}
+    const cbStatClick=`onclick="event.stopPropagation();openProject('${p.id}','callbacks')" style="${cbBoxStyle}" onmouseover="${cbOver}" onmouseout="${cbOut}"`;
     c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${priorityBtn}${changeFamily}${pinToggle}${delBtn}</div></div>
       <div class="pc-body"><div class="pc-stats">
         <div class="pc-stat" ${statClick('queue')}><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
-        <div class="pc-stat" ${statClick('callbacks')}><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
+        <div class="pc-stat" ${cbStatClick}><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
         <div class="pc-stat" ${statClick('done')}><div class="pc-stat-num g">${p.done_count||0}</div><div class="pc-stat-label">Done</div></div>
       </div><button class="pc-open-btn"${famColour?` style="background:${famColour};" onmouseover="this.style.background='${famColour}'" onmouseout="this.style.background='${famColour}'"`:''}>Open Project →</button></div>`;
     return c;
@@ -1343,6 +1369,14 @@ function renderDashboard(){
     const headerBg=famColour||'#2a5a3a';
     const cc=document.createElement('div');cc.className='companion-card';cc.onclick=()=>openProject(comp.id);
     const btnHoverColour=famColour?famColour:'#2a5a3a';
+    // Callback overdue highlight for companion
+    const compMaxD=comp.max_callback_days||0;
+    const compHasCb=(comp.callback_count||0)>0;
+    let ccBoxStyle='cursor:pointer;transition:background .15s;';
+    let ccOver="this.style.background='var(--hover)'";
+    let ccOut="this.style.background=''";
+    if(compHasCb&&compMaxD>=5){ccBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';ccOver="this.style.background='#ffcfcf'";ccOut="this.style.background='#ffe4e4'";}
+    else if(compHasCb&&compMaxD>=3){ccBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';ccOver="this.style.background='#fff1a3'";ccOut="this.style.background='#fff9c4'";}
     cc.innerHTML=`<div class="pc-header" style="background:${headerBg};">
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
@@ -1350,7 +1384,7 @@ function renderDashboard(){
       <div class="pc-body">
         <div class="pc-stats">
           <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','queue')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
-          <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','callbacks')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num o">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
+          <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','callbacks')" style="${ccBoxStyle}" onmouseover="${ccOver}" onmouseout="${ccOut}"><div class="pc-stat-num o">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
           <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','done')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num g">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
         </div>
         <button class="pc-open-btn" style="background:${headerBg};" onmouseover="this.style.background='${btnHoverColour}'" onmouseout="this.style.background='${headerBg}'">Open New Records →</button>
@@ -1681,8 +1715,15 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction){
     }).join('');
     if(withLastAction){
       const ts=_callbackTimestamps[r.id];
-      const dateStr=ts?ts.slice(0,10).replace(/-/g,''):'—';
-      rowHtml+=`<td style="font-family:var(--font);font-size:11px;color:var(--muted);white-space:nowrap;">${dateStr}</td>`;
+      const d=ts?daysAgo(ts):999; // missing timestamps treated as very overdue
+      const label=ts?formatLastAction(ts):'—';
+      let cellStyle='font-family:var(--font);font-size:11px;white-space:nowrap;';
+      let rowBg='';
+      if(d>=5){cellStyle+='color:#b00020;font-weight:700;';rowBg='#ffe4e4';}
+      else if(d>=3){cellStyle+='color:#b45309;font-weight:700;';rowBg='#fff9c4';}
+      else{cellStyle+='color:var(--muted);';}
+      rowHtml+=`<td style="${cellStyle}">${esc(label)}</td>`;
+      if(rowBg)tr.style.background=rowBg;
     }
     tr.innerHTML=rowHtml;
     const td=document.createElement('td');
@@ -1850,12 +1891,28 @@ function getFieldVal(r,f){
   return '';
 }
 
+// Days between an ISO timestamp and today (both normalised to local midnight).
+// Returns null if no timestamp.
+function daysAgo(isoTs){
+  if(!isoTs)return null;
+  const then=new Date(isoTs);then.setHours(0,0,0,0);
+  const today=new Date();today.setHours(0,0,0,0);
+  return Math.floor((today-then)/86400000);
+}
+// Format a timestamp as "YYYYMMDD (X days ago)" / "today" / "1 day ago".
+function formatLastAction(isoTs){
+  if(!isoTs)return '—';
+  const dateStr=isoTs.slice(0,10).replace(/-/g,'');
+  const d=daysAgo(isoTs);
+  const label=d<=0?'today':d===1?'1 day ago':d+' days ago';
+  return dateStr+' ('+label+')';
+}
+
 function updateLastActionBanner(r){
   const el=gel('lastActionBanner');if(!el)return;
   const ts=r&&r.id?_callbackTimestamps[r.id]:null;
   if(!ts){el.style.display='none';el.textContent='';return;}
-  const dateStr=ts.slice(0,10).replace(/-/g,'');
-  el.textContent='Last actioned: '+dateStr;
+  el.textContent='Last actioned: '+formatLastAction(ts);
   el.style.display='';
 }
 
