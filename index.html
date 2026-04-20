@@ -1032,7 +1032,7 @@ function mergeRecord(r){
 }
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
-let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true;
+let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null;
 let _impersonating=false,_realRole=null,_realPerms=null;
 let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
@@ -1326,11 +1326,12 @@ function renderDashboard(){
     const pinToggle=isSuperuser?`<button class="pc-pin" onclick="toggleProjectPin('${p.id}',${isPinned?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPinned?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPinned?'Remove permanent status':'Make permanent'}">${isPinned?'★ Permanent':'☆ Make Permanent'}</button>`:'';
     const changeFamily=isPinned&&isSuperuser?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;">${famLabel||'Set Family'}</button>`:'';
     const priorityBtn=isSuperuser?`<button onclick="togglePriority('${p.id}',${isPriority?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPriority?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPriority?'Remove priority':'Set as priority'}">${isPriority?'⚡ Priority':'⚡'}</button>`:'';
+    const statClick=tab=>`onclick="event.stopPropagation();openProject('${p.id}','${tab}')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"`;
     c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${priorityBtn}${changeFamily}${pinToggle}${delBtn}</div></div>
       <div class="pc-body"><div class="pc-stats">
-        <div class="pc-stat"><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
-        <div class="pc-stat"><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
-        <div class="pc-stat"><div class="pc-stat-num g">${p.done_count||0}</div><div class="pc-stat-label">Done</div></div>
+        <div class="pc-stat" ${statClick('queue')}><div class="pc-stat-num">${p.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
+        <div class="pc-stat" ${statClick('callbacks')}><div class="pc-stat-num o">${p.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
+        <div class="pc-stat" ${statClick('done')}><div class="pc-stat-num g">${p.done_count||0}</div><div class="pc-stat-label">Done</div></div>
       </div><button class="pc-open-btn"${famColour?` style="background:${famColour};" onmouseover="this.style.background='${famColour}'" onmouseout="this.style.background='${famColour}'"`:''}>Open Project →</button></div>`;
     return c;
   }
@@ -1347,9 +1348,9 @@ function renderDashboard(){
       </div>
       <div class="pc-body">
         <div class="pc-stats">
-          <div class="pc-stat"><div class="pc-stat-num">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
-          <div class="pc-stat"><div class="pc-stat-num o">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
-          <div class="pc-stat"><div class="pc-stat-num g">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
+          <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','queue')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num">${comp.ready_count||0}</div><div class="pc-stat-label">Ready</div></div>
+          <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','callbacks')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num o">${comp.callback_count||0}</div><div class="pc-stat-label">Callbacks</div></div>
+          <div class="pc-stat" onclick="event.stopPropagation();openProject('${comp.id}','done')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><div class="pc-stat-num g">${comp.done_count||0}</div><div class="pc-stat-label">Done</div></div>
         </div>
         <button class="pc-open-btn" style="background:${headerBg};" onmouseover="this.style.background='${btnHoverColour}'" onmouseout="this.style.background='${headerBg}'">Open New Records →</button>
       </div>`;
@@ -1405,9 +1406,10 @@ function renderDashboard(){
   grid.appendChild(np);
 }
 
-async function openProject(projId){
+async function openProject(projId,initialTab){
   // Clear records immediately to prevent count bleed from previous project
   records=[];
+  _pendingProjTab=initialTab||null;
   // Show a loading overlay while data loads
   let overlay=gel('projLoadingOverlay');
   if(!overlay){overlay=document.createElement('div');overlay.id='projLoadingOverlay';overlay.style.cssText='position:fixed;inset:0;background:rgba(26,58,92,0.85);display:flex;align-items:center;justify-content:center;z-index:900;flex-direction:column;gap:14px;';overlay.innerHTML='<div class="ld-spin"></div><div style="font-family:var(--font);font-size:11px;font-weight:600;color:rgba(255,255,255,.6);letter-spacing:.1em;text-transform:uppercase;">Loading project…</div>';document.body.appendChild(overlay);}
@@ -1446,7 +1448,9 @@ async function openProject(projId){
   // Project brief banner
   renderBriefBanner();
   showScreen('project');
-  switchProjTab('queue');updateCounts();trackPresence();
+  const startTab=_pendingProjTab||'queue';
+  _pendingProjTab=null;
+  switchProjTab(startTab);updateCounts();trackPresence();
 }
 
 function goToDashboard(){
