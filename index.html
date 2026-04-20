@@ -4834,18 +4834,47 @@ async function bsPopulateViewAs(){
   // Preserve current selection if already populated
   const prev=sel.value||currentUser.email;
   try{
-    const{data,error}=await sb.from('user_roles').select('user_email,user_name');
-    if(error)throw error;
-    const list=(data||[])
-      .filter(u=>u.user_email&&!BS_EXCLUDE_EMAILS.has(u.user_email.toLowerCase()))
-      .map(u=>({email:u.user_email,name:(u.user_name||u.user_email).trim()}))
+    // birdseye_entries has both user_email AND user_name (user_roles has no name column).
+    // Use distinct (email,name) from the entries table as the authoritative researcher list.
+    const[entriesR,rolesR]=await Promise.all([
+      sb.from('birdseye_entries').select('user_email,user_name'),
+      sb.from('user_roles').select('user_email')
+    ]);
+    console.log('[bsPopulateViewAs] birdseye_entries rows=',entriesR?.data?.length,'error=',entriesR?.error);
+    console.log('[bsPopulateViewAs] user_roles rows=',rolesR?.data?.length,'error=',rolesR?.error);
+
+    const byEmail=new Map(); // email (lowercased key) → {email, name}
+    (entriesR?.data||[]).forEach(r=>{
+      if(!r.user_email)return;
+      const key=r.user_email.toLowerCase();
+      const name=(r.user_name||r.user_email).trim();
+      // Keep the first non-empty name encountered
+      if(!byEmail.has(key))byEmail.set(key,{email:r.user_email,name});
+      else if(!byEmail.get(key).name&&name)byEmail.get(key).name=name;
+    });
+    // Add any user_roles emails that haven't logged a timesheet yet (email-prefix fallback for name)
+    (rolesR?.data||[]).forEach(r=>{
+      if(!r.user_email)return;
+      const key=r.user_email.toLowerCase();
+      if(!byEmail.has(key)){
+        const prefix=r.user_email.split('@')[0];
+        const name=prefix.split(/[._]/).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+        byEmail.set(key,{email:r.user_email,name});
+      }
+    });
+    console.log('[bsPopulateViewAs] merged candidates=',[...byEmail.values()]);
+
+    const list=[...byEmail.values()]
+      .filter(u=>!BS_EXCLUDE_EMAILS.has(u.email.toLowerCase()))
       .sort((a,b)=>a.name.localeCompare(b.name));
-    // Ensure the logged-in user appears (useful fallback if user_roles is missing name)
-    if(!list.some(u=>u.email===currentUser.email)){
-      list.unshift({email:currentUser.email,name:(getUserDisplayName()||currentUser.email)+' (me)'});
+    // Ensure the logged-in user is in the list (even if not in user_roles or entries yet)
+    if(!list.some(u=>u.email.toLowerCase()===currentUser.email.toLowerCase())){
+      list.unshift({email:currentUser.email,name:getUserDisplayName()||currentUser.email});
     }
+    console.log('[bsPopulateViewAs] final list=',list);
+
     sel.innerHTML=list.map(u=>{
-      const isMe=u.email===currentUser.email;
+      const isMe=u.email.toLowerCase()===currentUser.email.toLowerCase();
       return `<option value="${esc(u.email)}">${esc(u.name)}${isMe?' (me)':''}</option>`;
     }).join('');
     sel.value=prev||currentUser.email;
