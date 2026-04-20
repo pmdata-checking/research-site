@@ -437,6 +437,8 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <button class="tb-go" onclick="renderQ()">Go</button>
           <button class="tb-btn" onclick="document.getElementById('qSearch').value='';renderQ()">✕</button>
           <div class="tb-spacer"></div>
+          <button class="tb-btn" id="checkVerfileBtn" onclick="checkVerfile(true)">🔍 Check Verfile</button>
+          <button class="tb-btn" id="removeVerfileBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="removeSelectedVerfile()">🗑 Remove Selected</button>
           <button class="tb-btn" id="checkDupBtn" onclick="checkDuplicates()" style="display:none;">⧉ Check Duplicates</button>
           <button class="tb-btn" id="deleteQBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="deleteList('Ready')">🗑 Delete Entire List</button>
         </div>
@@ -1056,7 +1058,7 @@ function mergeRecord(r){
 }
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
-let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null;
+let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null,_verfileMatches={},_verfileSelected=new Set();
 let _impersonating=false,_realRole=null,_realPerms=null;
 let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
@@ -1509,6 +1511,9 @@ async function openProject(projId,initialTab){
   const startTab=_pendingProjTab||'queue';
   _pendingProjTab=null;
   switchProjTab(startTab);updateCounts();trackPresence();
+  // Reset verfile state and kick off a background check when the Ready list is active
+  _verfileMatches={};_verfileSelected.clear();updateVerfileRemoveBtn();
+  if(startTab==='queue')setTimeout(()=>checkVerfile(false),200);
 }
 
 function goToDashboard(){
@@ -1711,16 +1716,25 @@ function sumCols(){
 }
 function colLabel(c){if(c==='_status')return'Status';return KNOWN[c]||c.replace(/_/g,' ');}
 
-function renderTable(hEl,bEl,rows,searchTerm,withLastAction){
+function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
   const cols=sumCols();
-  let headHtml=cols.map(c=>`<th>${colLabel(c)}</th>`).join('');
+  // Determine if the Verfile "Last Verified" column should show (only when matches exist on screen)
+  const anyVerified=withVerfile&&rows.some(r=>_verfileMatches[recordRef(r)]);
+  let headHtml='';
+  if(anyVerified){
+    headHtml+='<th style="width:32px;"><input type="checkbox" id="verfileSelectAll" onclick="toggleVerfileSelectAll(this.checked)" title="Select all recently verified"></th>';
+  }
+  headHtml+=cols.map(c=>`<th>${colLabel(c)}</th>`).join('');
   if(withLastAction){
     const arrow=_cbSortAsc?'▲':'▼';
     headHtml+=`<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="toggleCbSort()" title="Click to toggle sort order">Last Action ${arrow}</th>`;
   }
+  if(anyVerified){
+    headHtml+='<th style="white-space:nowrap;">Last Verified</th>';
+  }
   hEl.innerHTML=headHtml+'<th style="width:150px;"></th>';
   bEl.innerHTML='';
-  const colCount=cols.length+(withLastAction?1:0)+1;
+  const colCount=cols.length+(withLastAction?1:0)+(anyVerified?2:0)+1;
   if(!rows.length){bEl.innerHTML=`<tr><td colspan="${colCount}" class="no-rec">No records found.</td></tr>`;return;}
   // Build a regex for highlighting the search term in results
   const hlRe=searchTerm?new RegExp('('+searchTerm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'):null;
@@ -1732,7 +1746,17 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction){
     const tr=document.createElement('tr');
     tr.style.cursor='pointer';
     tr.onclick=()=>lockedOther?showToast('Locked by '+lockerName(r.id),'locked'):openPreview(idx);
-    let rowHtml=cols.map(c=>{
+    const vfDate=withVerfile?_verfileMatches[recordRef(r)]:null;
+    let rowHtml='';
+    if(anyVerified){
+      if(vfDate){
+        const checked=_verfileSelected.has(r.id)?' checked':'';
+        rowHtml+='<td onclick="event.stopPropagation();"><input type="checkbox"'+checked+' onclick="event.stopPropagation();toggleVerfileRowSelect(\''+r.id+'\',this.checked)"></td>';
+      } else {
+        rowHtml+='<td></td>';
+      }
+    }
+    rowHtml+=cols.map(c=>{
       if(c==='_status'){const cls=r.is_new_record?'spill-new':'spill-'+(r._status||'ready').toLowerCase();return`<td><span class="spill ${cls}">${r.is_new_record&&r._status==='Ready'?'New':r._status||''}</span></td>`;}
       return`<td>${hl(getFieldVal(r,c))}</td>`;
     }).join('');
@@ -1747,6 +1771,14 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction){
       else{cellStyle+='color:var(--muted);';}
       rowHtml+=`<td style="${cellStyle}">${esc(label)}</td>`;
       if(rowBg)tr.style.background=rowBg;
+    }
+    if(anyVerified){
+      if(vfDate){
+        rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#b00020;font-weight:700;">'+esc(vfDate)+'</td>';
+        tr.style.background='#ffe4e4';
+      } else {
+        rowHtml+='<td></td>';
+      }
     }
     tr.innerHTML=rowHtml;
     const td=document.createElement('td');
@@ -1775,7 +1807,110 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction){
     tr.appendChild(td);bEl.appendChild(tr);
   });
 }
-function renderQ(){const q=val('qSearch').toLowerCase();const rows=records.filter(r=>r._status==='Ready'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));renderTable(gel('qHead'),gel('qBody'),rows,q);}
+function renderQ(){
+  const q=val('qSearch').toLowerCase();
+  const rows=records.filter(r=>r._status==='Ready'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));
+  renderTable(gel('qHead'),gel('qBody'),rows,q,false,true);
+  updateVerfileRemoveBtn();
+}
+
+// Shared helper: pull the REF value off a record (same field set used by exports)
+function recordRef(r){
+  if(!r)return '';
+  const names=['suref','wbref','sbref','wdc_wbref','SUREF','WBREF','SBREF','WDC_WBREF'];
+  for(const n of names){
+    const v=r[n];
+    if(v!=null&&String(v).trim())return String(v).trim();
+  }
+  if(r.data&&typeof r.data==='object'){
+    for(const k of Object.keys(r.data)){
+      if(names.includes(k)||names.includes(k.toLowerCase())){
+        const v=r.data[k];
+        if(v!=null&&String(v).trim())return String(v).trim();
+      }
+    }
+  }
+  return '';
+}
+
+async function checkVerfile(showToastOnResult){
+  if(!currentProject)return;
+  const readyRecs=records.filter(r=>r._status==='Ready'&&r.project_id===currentProject.id);
+  const refs=[...new Set(readyRecs.map(recordRef).filter(Boolean))];
+  if(!refs.length){_verfileMatches={};_verfileSelected.clear();if(_currentProjTabIsQueue())renderQ();return;}
+  try{
+    const res=await fetch('https://checking.prospectmanager.co.uk/checking/api/verfile-check/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({refs})
+    });
+    if(!res.ok){
+      const t=await res.text();
+      if(showToastOnResult)showToast('Verfile check failed: '+t.slice(0,120),'error');
+      return;
+    }
+    const data=await res.json();
+    _verfileMatches=data.matches||{};
+    _verfileSelected=new Set();
+    if(_currentProjTabIsQueue())renderQ();
+    if(showToastOnResult){
+      const n=Object.keys(_verfileMatches).length;
+      showToast(n?(n+' recently-verified record'+(n===1?'':'s')+' flagged'):'No recently-verified matches found',n?'info':'done');
+    }
+  }catch(err){
+    if(showToastOnResult)showToast('Verfile check error: '+(err.message||err),'error');
+  }
+}
+
+function _currentProjTabIsQueue(){
+  const qs=gel('pview-queue');
+  return qs&&qs.classList.contains('active');
+}
+
+function toggleVerfileRowSelect(recId,checked){
+  if(checked)_verfileSelected.add(recId);else _verfileSelected.delete(recId);
+  updateVerfileRemoveBtn();
+  const master=gel('verfileSelectAll');
+  if(master){
+    const allIds=Object.keys(_verfileMatches).map(ref=>{
+      const rec=records.find(r=>recordRef(r)===ref&&r._status==='Ready');
+      return rec?rec.id:null;
+    }).filter(Boolean);
+    master.checked=allIds.length>0&&allIds.every(id=>_verfileSelected.has(id));
+  }
+}
+function toggleVerfileSelectAll(checked){
+  _verfileSelected=new Set();
+  if(checked){
+    records.forEach(r=>{
+      if(r._status!=='Ready'||!currentProject||r.project_id!==currentProject.id)return;
+      const ref=recordRef(r);
+      if(ref&&_verfileMatches[ref])_verfileSelected.add(r.id);
+    });
+  }
+  renderQ();
+}
+function updateVerfileRemoveBtn(){
+  const btn=gel('removeVerfileBtn');
+  if(btn)btn.style.display=_verfileSelected.size>0?'':'none';
+  if(btn)btn.textContent='🗑 Remove Selected ('+_verfileSelected.size+')';
+}
+async function removeSelectedVerfile(){
+  if(!_verfileSelected.size)return;
+  const ids=[..._verfileSelected];
+  if(!confirm('Remove '+ids.length+' recently verified record'+(ids.length===1?'':'s')+' from this project?\n\nThis cannot be undone.'))return;
+  const{error}=await sb.from('records').delete().in('id',ids);
+  if(error){showToast('Remove failed: '+error.message,'error');return;}
+  records=records.filter(r=>!ids.includes(r.id));
+  _verfileSelected.clear();
+  // Drop matches for deleted records
+  ids.forEach(id=>{
+    const rec=records.find(r=>r.id===id); // will be undefined since removed
+    // cleanup not strictly needed — _verfileMatches keyed by ref not id
+  });
+  updateCounts();renderQ();
+  showToast('Removed '+ids.length+' record'+(ids.length===1?'':'s'),'done');
+}
 function renderCB(){
   const q=val('cbSearch').toLowerCase();
   const rows=records.filter(r=>r._status==='Callback'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));
