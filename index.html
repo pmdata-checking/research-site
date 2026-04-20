@@ -6,7 +6,7 @@
 <title>PROSPECTManager™</title>
 <link rel="icon" type="image/jpeg" href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDwaiiiu88EKKKKACiiigAooooAKsabAtzqNpBJkJLMkbY64LAH+dV6u6H/AMhrT/8Ar5i/9DFZ1W1Btdioq8kep674N8B6HrMOl6lqGrw3MwDIcgoAzFQSwXjkVi3vgWy0fx9a6JqMtxNp95GZY7lJBG8SAMWLcEHG056cc12vxLvfCFh4tt5/EVlqF1qEcKvGISPKKh22gjIyc5rh9a8UyeJtR13WvJNvBa6a1pbIWyymVwmSfUhnP4V8TltbHV6UanNPllHVytbmbSi4W1336Hq1o0oyasrp9O3W5zvj7QovDvim7061aR7dAjxNIQWKsoPJAHfNbHhPwjZXXhbVdf12S4S2tot8EMDhXl5IySQcAsNo+h9K2PHNhHrt54c1m4dorCbSEnvJh1VYzggf7RLBQPUio9U1Bv8AhU11duiwnV9RWKKJekcEIwqD2G3HvknvXpfXq9bCUKcZWm3GMn1unaS9WlJvsvVGHsYRqSk1pq1/XzR5pKVMjGNSiE8KW3YHpnvTaKK+nWhwBUtnOba7gnVQxikWQA98EHH6VFVvSLqGy1S1ubq0jvIIpA728hwsgH8JqanwPS/l3HHdGv458US+LdYTUJ7WO2ZIhFsjYsCASc5P+9UFtrFrB4eutMGm7nuWSR7j7QwbcmduBjGPmPH61Yute0yWy1SGPw9Zxy3d2txDKHObdARmNeOhwfT7x9qsXXibSZrzV5o/C9jFHeWqwQRhzi2cDBkXjqevboPfPlwp8lKNGNBqMbWXMulrfa83v/L5o6HK8nJzV35f8D+rlO98UXl54Z0vQpVAsrJix2sQ0uWJAY9sZIH1zVnX/FUOq+HNP0iPSktYbDPkOlwzHn7xYEfMT+FSW3ifSYr7S55PC9hJHaWht5oi5xcOR/rG46/n1PPTFe01/TYbLSYZPD1nLJZ3TTzysxzcoScRtx0GR6/dHHXMqik4yWHaabkveW75rv4tfn/NbZMfPuufdW29PL+rHN0Va1a5hvdTurm2tY7OGWRnS3jOVjBP3RVWvXi24ptWZytWegUUUVQgooooAKKKKACiiigD/9k=">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600&family=Libre+Baskerville:ital@1&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
@@ -4930,113 +4930,215 @@ async function bsExportYtd(){
   });
   const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
   const headers=['Database','Desk','Called','Validated','VM/NR','Refused','Callback','Gone','Hours','Rate'];
-  const aoa=[];
-  aoa.push([year+' BIRDSEYE YEAR TO DATE REPORT']);
-  aoa.push(['As of '+bsFormatNice(new Date())]);
-  aoa.push([]);
-  const merges=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}},{s:{r:1,c:0},e:{r:1,c:headers.length-1}}];
+  const NAME_FILL='BFBFBF';   // researcher name row
+  const HEADER_FILL='D9D9D9'; // column header row + DB PROGRESS header
+  const SIDE_START=11; // column L (0-indexed) — after A-J block + column K spacer
 
-  // Build the Verfile "Database Progress" section as AOA rows.
-  // Returns the rows plus any merges relative to a base row index.
-  function buildVerfileSection(){
+  // Build a researcher block (10 rows: name, headers, 7 databases, TOTAL) + compute grand/hours
+  function buildResearcherBlock(name,entrySubset){
+    const totals=bsAggregateByDatabase(entrySubset);
+    const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    const hoursAll=new Set();
+    entrySubset.forEach(e=>{hoursAll.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
+    const rows=[];
+    // 0: name, 1: headers, 2..8: 7 databases, 9: TOTAL
+    rows.push([name]);
+    rows.push([...headers]);
+    BS_DATABASES.forEach(db=>{
+      const t=totals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
+      rows.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
+    });
+    const gHours=hoursAll.size;
+    const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
+    rows.push(['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate]);
+    return rows; // always exactly 10 rows
+  }
+
+  // Build Team Total (YTD) block as rows (10 rows, identical structure to a researcher block)
+  function buildTeamTotalBlock(){
+    const teamTotals=bsAggregateByDatabase(entries);
+    const teamGrand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    const teamHours=new Set();
+    entries.forEach(e=>{teamHours.add(e.user_email+'__'+e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{teamGrand[f]+=(e[f]||0);});});
+    const rows=[];
+    rows.push(['TEAM TOTAL (YTD)']);
+    rows.push([...headers]);
+    BS_DATABASES.forEach(db=>{
+      const t=teamTotals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
+      rows.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
+    });
+    const teamRate=teamHours.size>0?(teamGrand.validated/teamHours.size).toFixed(2):'';
+    rows.push(['TOTAL',teamGrand.desk,teamGrand.called,teamGrand.validated,teamGrand.vm_nr,teamGrand.refused,teamGrand.callback,teamGrand.gone,teamHours.size,teamRate]);
+    return rows;
+  }
+
+  // Build Verfile Database Progress rows (variable length).
+  function buildVerfileRows(){
     const vHeaders=['Database','Total Records','Date of oldest record','>100 Emp (Tier 1)','21-99 Emp (Tier 2)','1-20 Emp (Tier 3)','Records left','% to complete'];
-    const rows=[];const localMerges=[];
-    const titleRow=['DATABASE PROGRESS'];while(titleRow.length<vHeaders.length)titleRow.push('');
-    rows.push(titleRow);localMerges.push({relRow:0,span:vHeaders.length});
+    const rows=[];
+    rows.push(['DATABASE PROGRESS']);
     if(!_dbProgress||!_dbProgress.data){
       rows.push(['Verfile data not loaded — click Refresh Verfile Data in the dashboard before exporting']);
-      localMerges.push({relRow:1,span:vHeaders.length});
-      rows.push([]);
-      return{rows,localMerges};
+      return{rows,vHeaders,dataRowCount:0};
     }
     rows.push(vHeaders);
     const dbs=Object.keys(_dbProgress.data).filter(k=>k!=='last_updated');
+    let dataRowCount=0;
     dbs.forEach(k=>{
       const d=_dbProgress.data[k]||{};
       const label=DB_PROGRESS_LABELS[k]||k.toUpperCase();
       const pct=(d.percent_complete==null||isNaN(d.percent_complete))?'':(Number(d.percent_complete)*100).toFixed(1)+'%';
-      rows.push([
-        label,
-        d.total_records??'',
-        d.oldest_date||'',
-        d.tier1_oldest||'',
-        d.tier2_oldest||'',
-        d.tier3_oldest||'',
-        d.records_left??'',
-        pct
-      ]);
+      rows.push([label,d.total_records??'',d.oldest_date||'',d.tier1_oldest||'',d.tier2_oldest||'',d.tier3_oldest||'',d.records_left??'',pct]);
+      dataRowCount++;
     });
     const ts=_dbProgress.fetchedAt?_dbProgress.fetchedAt.toLocaleString('en-GB'):'unknown';
     rows.push(['Last updated: '+ts]);
-    localMerges.push({relRow:rows.length-1,span:vHeaders.length});
-    rows.push([]);
-    return{rows,localMerges};
+    return{rows,vHeaders,dataRowCount};
   }
 
-  let georgiaRendered=false;
-  users.forEach(u=>{
-    const isGeorgia=/georgia/i.test(u.name);
-    // Researcher name row
-    const nameRow=[u.name];
-    while(nameRow.length<headers.length)nameRow.push('');
-    const nameRowIdx=aoa.length;
-    aoa.push(nameRow);
-    merges.push({s:{r:nameRowIdx,c:0},e:{r:nameRowIdx,c:headers.length-1}});
-    // Header row
-    aoa.push([...headers]);
-    // Per-database rows
-    const totals=bsAggregateByDatabase(u.entries);
-    const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-    const hoursAll=new Set();
-    u.entries.forEach(e=>{hoursAll.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
-    BS_DATABASES.forEach(db=>{
-      const t=totals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
-      aoa.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
-    });
-    // Total row
-    const gHours=hoursAll.size;
-    const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
-    aoa.push(['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate]);
-    aoa.push([]);
-    // Inject Verfile section directly below Georgia's block
-    if(isGeorgia){
-      const{rows:vRows,localMerges:vMerges}=buildVerfileSection();
-      const base=aoa.length;
-      vRows.forEach(r=>aoa.push(r));
-      vMerges.forEach(m=>merges.push({s:{r:base+m.relRow,c:0},e:{r:base+m.relRow,c:m.span-1}}));
-      georgiaRendered=true;
+  const aoa=[];
+  const merges=[];
+  // Title rows merged across full width (A:T)
+  const titleWidth=20;
+  aoa.push([year+' BIRDSEYE YEAR TO DATE REPORT']);
+  aoa.push(['As of '+bsFormatNice(new Date())]);
+  aoa.push([]);
+  merges.push({s:{r:0,c:0},e:{r:0,c:titleWidth-1}});
+  merges.push({s:{r:1,c:0},e:{r:1,c:titleWidth-1}});
+
+  // Track cells that need styling — { ref:'A4', type:'name'|'header'|'total'|'dbHeader'|'dbColHeader' }
+  const styleMap=[];
+  function markRow(baseRow,colStart,colCount,type){
+    for(let c=colStart;c<colStart+colCount;c++){
+      styleMap.push({r:baseRow,c,type});
     }
-  });
-  // Fallback: if Georgia wasn't in the data, still inject before Team Total
-  if(!georgiaRendered){
-    const{rows:vRows,localMerges:vMerges}=buildVerfileSection();
-    const base=aoa.length;
-    vRows.forEach(r=>aoa.push(r));
-    vMerges.forEach(m=>merges.push({s:{r:base+m.relRow,c:0},e:{r:base+m.relRow,c:m.span-1}}));
   }
 
-  // Team total
-  const teamTotals=bsAggregateByDatabase(entries);
-  const teamGrand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-  const teamHours=new Set();
-  entries.forEach(e=>{teamHours.add(e.user_email+'__'+e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{teamGrand[f]+=(e[f]||0);});});
-  aoa.push(['TEAM TOTAL (YTD)']);
-  merges.push({s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:headers.length-1}});
-  aoa.push(headers);
-  BS_DATABASES.forEach(db=>{
-    const t=teamTotals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
-    aoa.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
+  // Helper to place a block (array of row arrays) at a given (baseRow, baseCol).
+  // Extends existing rows as needed. Returns the number of rows placed.
+  function placeBlock(block,baseRow,baseCol){
+    for(let i=0;i<block.length;i++){
+      const r=baseRow+i;
+      while(aoa.length<=r)aoa.push([]);
+      const row=aoa[r];
+      const cells=block[i];
+      for(let c=0;c<cells.length;c++){
+        while(row.length<=baseCol+c)row.push('');
+        row[baseCol+c]=cells[c];
+      }
+    }
+  }
+
+  // Render researchers. Gavin gets Team Total to the right; Georgia gets Verfile to the right.
+  const gavinUser=users.find(u=>/^gavin/i.test(u.name));
+  const georgiaUser=users.find(u=>/^georgia/i.test(u.name));
+  const teamBlock=buildTeamTotalBlock();
+  const verfileInfo=buildVerfileRows();
+
+  let cursor=aoa.length; // first free row index (currently 3, after the title rows + blank)
+  users.forEach(u=>{
+    const block=buildResearcherBlock(u.name,u.entries);
+    const base=cursor;
+    placeBlock(block,base,0);
+    // Merge the name row A:J
+    merges.push({s:{r:base,c:0},e:{r:base,c:headers.length-1}});
+    // Styling
+    markRow(base,0,headers.length,'name');
+    markRow(base+1,0,headers.length,'header');
+    markRow(base+9,0,headers.length,'total');
+
+    // Side content per researcher
+    if(u===gavinUser){
+      placeBlock(teamBlock,base,SIDE_START);
+      const sideW=headers.length;
+      merges.push({s:{r:base,c:SIDE_START},e:{r:base,c:SIDE_START+sideW-1}});
+      markRow(base,SIDE_START,sideW,'name');
+      markRow(base+1,SIDE_START,sideW,'header');
+      markRow(base+9,SIDE_START,sideW,'total');
+    } else if(u===georgiaUser){
+      placeBlock(verfileInfo.rows,base,SIDE_START);
+      const sideW=verfileInfo.vHeaders.length;
+      // DB PROGRESS title row
+      merges.push({s:{r:base,c:SIDE_START},e:{r:base,c:SIDE_START+sideW-1}});
+      markRow(base,SIDE_START,sideW,'dbHeader');
+      if(_dbProgress&&_dbProgress.data){
+        markRow(base+1,SIDE_START,sideW,'dbColHeader');
+        // Last-updated row (final row of block)
+        const lastRow=base+verfileInfo.rows.length-1;
+        merges.push({s:{r:lastRow,c:SIDE_START},e:{r:lastRow,c:SIDE_START+sideW-1}});
+      } else {
+        // The "not loaded" message
+        merges.push({s:{r:base+1,c:SIDE_START},e:{r:base+1,c:SIDE_START+sideW-1}});
+      }
+    }
+
+    cursor=base+block.length;
+    // Blank spacer row after each researcher
+    aoa.push([]);
+    cursor++;
   });
-  const teamTotalRate=teamHours.size>0?(teamGrand.validated/teamHours.size).toFixed(2):'';
-  aoa.push(['TOTAL',teamGrand.desk,teamGrand.called,teamGrand.validated,teamGrand.vm_nr,teamGrand.refused,teamGrand.callback,teamGrand.gone,teamHours.size,teamTotalRate]);
+
+  // If Georgia wasn't in the data, still place the Verfile block after all researchers
+  if(!georgiaUser){
+    const base=cursor;
+    placeBlock(verfileInfo.rows,base,0);
+    const sideW=verfileInfo.vHeaders.length;
+    merges.push({s:{r:base,c:0},e:{r:base,c:sideW-1}});
+    markRow(base,0,sideW,'dbHeader');
+    if(_dbProgress&&_dbProgress.data){
+      markRow(base+1,0,sideW,'dbColHeader');
+      const lastRow=base+verfileInfo.rows.length-1;
+      merges.push({s:{r:lastRow,c:0},e:{r:lastRow,c:sideW-1}});
+    } else {
+      merges.push({s:{r:base+1,c:0},e:{r:base+1,c:sideW-1}});
+    }
+    cursor=base+verfileInfo.rows.length+1;
+    aoa.push([]);
+  }
+
+  // If Gavin wasn't in the data, append Team Total at the bottom so it still exists
+  if(!gavinUser){
+    const base=cursor;
+    placeBlock(teamBlock,base,0);
+    merges.push({s:{r:base,c:0},e:{r:base,c:headers.length-1}});
+    markRow(base,0,headers.length,'name');
+    markRow(base+1,0,headers.length,'header');
+    markRow(base+9,0,headers.length,'total');
+  }
 
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges']=merges;
-  ws['!cols']=[{wch:22},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:14},{wch:14},{wch:8},{wch:8}];
+  // Column widths: A-J for researcher block, K spacer, L onwards for side section (reuses same widths)
+  ws['!cols']=[
+    {wch:22},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},
+    {wch:2},
+    {wch:22},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:14},{wch:14},{wch:8}
+  ];
+
+  // Apply styles
+  function cellRef(r,c){return XLSX.utils.encode_cell({r,c});}
+  function ensureCell(r,c){
+    const ref=cellRef(r,c);
+    if(!ws[ref])ws[ref]={v:'',t:'s'};
+    return ws[ref];
+  }
+  const borderThin={style:'thin',color:{rgb:'999999'}};
+  const thinAll={top:borderThin,bottom:borderThin,left:borderThin,right:borderThin};
+  styleMap.forEach(({r,c,type})=>{
+    const cell=ensureCell(r,c);
+    const style={font:{bold:true},border:thinAll,alignment:{vertical:'center'}};
+    if(type==='name'){style.fill={fgColor:{rgb:NAME_FILL}};}
+    else if(type==='header'){style.fill={fgColor:{rgb:HEADER_FILL}};}
+    else if(type==='total'){/* bold only, no fill */}
+    else if(type==='dbHeader'){style.fill={fgColor:{rgb:HEADER_FILL}};}
+    else if(type==='dbColHeader'){style.fill={fgColor:{rgb:HEADER_FILL}};}
+    cell.s=style;
+  });
+
   XLSX.utils.book_append_sheet(wb,ws,'YTD '+year);
   const fname='Birdseye_YTD_'+todayStr+'.xlsx';
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
   a.download=fname;a.click();
