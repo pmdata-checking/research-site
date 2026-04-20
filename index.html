@@ -1852,6 +1852,9 @@ async function checkVerfile(showToastOnResult){
     const data=await res.json();
     _verfileMatches=data.matches||{};
     _verfileSelected=new Set();
+    // Silently update each matched record's LAST_UP when the Verfile date is newer.
+    // In-memory update + Supabase write. Done in parallel, no toast/confirmation.
+    syncVerfileLastUpdates(readyRecs).catch(err=>console.warn('Verfile LAST_UP sync failed:',err));
     if(_currentProjTabIsQueue())renderQ();
     if(showToastOnResult){
       const n=Object.keys(_verfileMatches).length;
@@ -1859,6 +1862,49 @@ async function checkVerfile(showToastOnResult){
     }
   }catch(err){
     if(showToastOnResult)showToast('Verfile check error: '+(err.message||err),'error');
+  }
+}
+
+// Resolve the record's Last_up field name (same pattern used by doTagRec)
+function resolveLastUpField(r){
+  const norm=s=>s.toLowerCase().replace(/[_\s]/g,'');
+  return projFields.find(f=>norm(f)==='lastup')
+      ||Object.keys(r||{}).find(k=>norm(k)==='lastup'&&k!=='data')
+      ||(r&&r.data?Object.keys(r.data).find(k=>norm(k)==='lastup'):null)
+      ||'Last_up';
+}
+
+// Write back Verfile LAST_UP dates to matched records where the Verfile date
+// is newer than what the record currently holds. Silent/background.
+async function syncVerfileLastUpdates(readyRecs){
+  if(!_verfileMatches||!Object.keys(_verfileMatches).length)return;
+  const DIRECT_SET=(typeof DIRECT_COLS!=='undefined'&&DIRECT_COLS)?DIRECT_COLS:new Set();
+  for(const rec of readyRecs){
+    const ref=recordRef(rec);
+    if(!ref)continue;
+    const vfDate=_verfileMatches[ref];
+    if(!vfDate)continue;
+    const lastUpF=resolveLastUpField(rec);
+    // Read current value (top-level OR data blob)
+    let current='';
+    if(rec[lastUpF]!=null&&String(rec[lastUpF]).trim())current=String(rec[lastUpF]).trim();
+    else if(rec.data&&rec.data[lastUpF]!=null&&String(rec.data[lastUpF]).trim())current=String(rec.data[lastUpF]).trim();
+    // Normalise to YYYYMMDD for comparison
+    const cur=current.replace(/[^0-9]/g,'').slice(0,8);
+    if(cur&&cur>=vfDate)continue; // current is same or newer — don't overwrite
+    // Update in-memory on both top-level and data blob
+    rec[lastUpF]=vfDate;
+    if(rec.data&&typeof rec.data==='object')rec.data[lastUpF]=vfDate;
+    // Update any visible form input if this record is currently open
+    const inp=document.querySelector('[data-field="'+lastUpF+'"]');
+    if(inp&&currentIdx>=0&&records[currentIdx]&&records[currentIdx].id===rec.id)inp.value=vfDate;
+    // Persist to Supabase — if the column is a direct DB column, save top-level; otherwise into data blob
+    const patch={};
+    if(DIRECT_SET.has(lastUpF)){patch[lastUpF]=vfDate;}
+    else{patch.data={...(rec.data||{}),[lastUpF]:vfDate};}
+    try{
+      await sb.from('records').update(patch).eq('id',rec.id);
+    }catch(e){console.warn('Verfile LAST_UP save failed for',rec.id,e);}
   }
 }
 
