@@ -5620,14 +5620,31 @@ async function csLoadReport(connectId){
     let json;try{json=JSON.parse(raw);}catch(e){throw new Error('Invalid response');}
     if(!res.ok)throw new Error(json.error||'Unable to load report — please try again');
     gel('csReportLoading').style.display='none';
-    const rpt=json.report||{};
 
     // ────────────── CREDITSAFE DEBUG LOGGING ──────────────
-    // Temporary: dump the full report JSON and the exact paths we're currently checking
-    // for Employees / Email / Phone so we can reconcile with what the API actually returns.
+    console.groupCollapsed('🔍 CreditSafe RAW response envelope');
+    console.log('raw text (first 2000 chars):',(raw||'').slice(0,2000));
+    console.log('parsed json envelope:',json);
+    console.log('envelope top-level keys:',json?Object.keys(json):'(no json)');
+    console.log('json.report =',json?.report);
+    console.log('json.report?.report =',json?.report?.report); // detect double-wrap
+    console.log('json.data =',json?.data);
+    console.groupEnd();
+
+    // Pick the best "report" object — handles single-wrap, double-wrap, and no-wrap cases
+    let rpt=json?.report;
+    if(rpt&&typeof rpt==='object'&&rpt.report&&typeof rpt.report==='object'&&!Array.isArray(rpt.report)){
+      // Double-wrapped: edge function re-wrapped an already-wrapped CreditSafe response
+      rpt=rpt.report;
+    }
+    if(!rpt||typeof rpt!=='object'||!Object.keys(rpt).length){
+      // Fall back to the envelope itself if report is missing/empty
+      rpt=json||{};
+    }
+
+    console.log('🔍 Full report object (serialized):',JSON.stringify(rpt));
     try{
-      console.groupCollapsed('🔍 CreditSafe report raw response');
-      console.log('Full report JSON:',rpt);
+      console.groupCollapsed('🔍 CreditSafe resolved report structure');
       console.log('Top-level keys:',Object.keys(rpt));
       const ci=rpt.contactInformation||{};
       const ai=rpt.additionalInformation||{};
