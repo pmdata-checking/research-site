@@ -4696,22 +4696,20 @@ function bsRenderDbProgressShell(){
   return`<div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;">
     <div style="padding:10px 16px;background:var(--navy);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:12px;">
       <span style="flex:1;">DATABASE PROGRESS</span>
-      <span id="bsDbProgressStamp" style="font-weight:400;font-size:11px;opacity:.85;">${esc(ts)}</span>
+      <span class="bsDbProgressStamp" style="font-weight:400;font-size:11px;opacity:.85;">${esc(ts)}</span>
       <button class="db-btn" onclick="bsRefreshDbProgress()" style="background:rgba(255,255,255,.18);padding:4px 10px;font-size:12px;">🔄 Refresh Verfile Data</button>
     </div>
-    <div id="bsDbProgressBody">${bsRenderDbProgressBody()}</div>
+    <div class="bsDbProgressBody">${bsRenderDbProgressBody()}</div>
   </div>`;
 }
 
 function bsRepaintDbProgress(){
-  const body=gel('bsDbProgressBody');
-  if(body)body.innerHTML=bsRenderDbProgressBody();
-  const stamp=gel('bsDbProgressStamp');
-  if(stamp){
-    stamp.textContent=(_dbProgress&&_dbProgress.fetchedAt)
-      ? 'Last updated: '+_dbProgress.fetchedAt.toLocaleString('en-GB')
-      : '';
-  }
+  const bodyHtml=bsRenderDbProgressBody();
+  document.querySelectorAll('.bsDbProgressBody').forEach(el=>{el.innerHTML=bodyHtml;});
+  const stampText=(_dbProgress&&_dbProgress.fetchedAt)
+    ? 'Last updated: '+_dbProgress.fetchedAt.toLocaleString('en-GB')
+    : '';
+  document.querySelectorAll('.bsDbProgressStamp').forEach(el=>{el.textContent=stampText;});
 }
 
 async function bsRefreshDbProgress(){
