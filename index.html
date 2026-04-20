@@ -230,13 +230,26 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 .ql-container.ql-snow{border-radius:0 0 6px 6px;border-color:var(--border);}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,20,40,.55);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(2px);}
 .modal-overlay.open{display:flex;}
-.side-panel{display:none;position:fixed;top:54px;right:0;bottom:0;width:40vw;min-width:420px;max-width:720px;background:#fff;z-index:200;box-shadow:-4px 0 24px rgba(0,0,0,.25);flex-direction:column;}
+.side-panel{display:none;position:fixed;top:54px;right:0;bottom:0;width:35vw;min-width:320px;max-width:75vw;background:#fff;z-index:200;box-shadow:-4px 0 24px rgba(0,0,0,.25);flex-direction:column;}
 .side-panel.open{display:flex;}
+.side-panel-resize{position:absolute;top:0;left:0;bottom:0;width:6px;cursor:ew-resize;background:transparent;z-index:2;}
+.side-panel-resize:hover{background:rgba(26,138,138,.25);}
 .side-panel-header{padding:14px 18px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;}
 .side-panel-title{font-family:var(--font);font-size:14px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.side-panel-toggle{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:4px;color:#fff;cursor:pointer;font-size:14px;padding:4px 10px;transition:background .15s;}
+.side-panel-toggle:hover{background:rgba(255,255,255,.28);}
 .side-panel-close{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:4px;color:#fff;cursor:pointer;font-size:14px;padding:4px 10px;transition:background .15s;}
 .side-panel-close:hover{background:rgba(255,255,255,.28);}
 .side-panel-body{flex:1;overflow-y:auto;padding:18px;}
+/* Collapsed state: narrow strip with vertical title, click to expand */
+.side-panel.collapsed{width:40px!important;min-width:40px!important;max-width:40px!important;cursor:pointer;}
+.side-panel.collapsed .side-panel-header{padding:10px 0;flex-direction:column;gap:8px;}
+.side-panel.collapsed .side-panel-title{font-size:11px;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;flex:0 0 auto;}
+.side-panel.collapsed .side-panel-close{display:none;}
+.side-panel.collapsed .side-panel-resize{display:none;}
+.side-panel.collapsed .side-panel-body{display:none;}
+/* Shrink the main container to accommodate the panel */
+.main{padding-right:var(--cs-panel-pad,0);transition:padding-right .2s;}
 .modal{background:#fff;border-radius:10px;padding:30px;width:500px;box-shadow:0 24px 60px rgba(0,0,0,.22);max-height:90vh;overflow-y:auto;}
 .modal h3{font-family:var(--font);font-size:17px;font-weight:800;color:var(--navy);margin-bottom:6px;}
 .modal-sub{font-size:12px;color:var(--muted);font-weight:500;margin-bottom:20px;}
@@ -901,9 +914,11 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 
 <!-- CREDITSAFE SIDE PANEL -->
 <div class="side-panel" id="csModal">
+  <div class="side-panel-resize" id="csPanelResize" title="Drag to resize"></div>
   <div class="side-panel-header">
+    <button class="side-panel-toggle" id="csPanelToggle" onclick="event.stopPropagation();toggleCsPanel()" title="Collapse / expand">‹</button>
     <span class="side-panel-title" id="csTitle">🔍 CreditSafe</span>
-    <button class="side-panel-close" onclick="closeCsPanel()" title="Close">✕</button>
+    <button class="side-panel-close" onclick="event.stopPropagation();closeCsPanel()" title="Close">✕</button>
   </div>
   <div class="side-panel-body">
     <!-- Step 1: Search -->
@@ -5726,8 +5741,75 @@ function openCreditSafe(){
   gel('csSearchLoading').style.display='none';
   gel('csTitle').textContent='🔍 CreditSafe'+(company?' — '+company:'');
   openModal('csModal');
+  csPanelApplyPadding();
   if(company)csDoSearch();
 }
+
+// ── CreditSafe side panel layout (resize + collapse) ──
+let _csPanelWidthPx=null; // remembered width so collapse → expand restores
+function csPanelApplyPadding(){
+  const panel=gel('csModal');
+  if(!panel||!panel.classList.contains('open')){
+    document.documentElement.style.setProperty('--cs-panel-pad','0');
+    return;
+  }
+  const collapsed=panel.classList.contains('collapsed');
+  const w=collapsed?40:(_csPanelWidthPx||panel.getBoundingClientRect().width||Math.round(window.innerWidth*0.35));
+  document.documentElement.style.setProperty('--cs-panel-pad',w+'px');
+}
+function toggleCsPanel(){
+  const panel=gel('csModal');if(!panel)return;
+  const nowCollapsed=!panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed',nowCollapsed);
+  const toggleBtn=gel('csPanelToggle');
+  if(toggleBtn)toggleBtn.textContent=nowCollapsed?'›':'‹';
+  if(nowCollapsed){
+    // clicking the collapsed strip should expand it
+    panel.addEventListener('click',csPanelStripClick);
+  } else {
+    panel.removeEventListener('click',csPanelStripClick);
+  }
+  csPanelApplyPadding();
+}
+function csPanelStripClick(e){
+  // Only expand if the click was on the panel itself (not the toggle button which already handles it)
+  const panel=gel('csModal');
+  if(!panel||!panel.classList.contains('collapsed'))return;
+  if(e.target===panel||e.target.classList.contains('side-panel-header')||e.target.classList.contains('side-panel-title')){
+    toggleCsPanel();
+  }
+}
+// Drag-to-resize
+(function wireCsResize(){
+  document.addEventListener('DOMContentLoaded',()=>{
+    const handle=gel('csPanelResize');
+    const panel=gel('csModal');
+    if(!handle||!panel)return;
+    let dragging=false;
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault();dragging=true;
+      document.body.style.userSelect='none';
+      document.body.style.cursor='ew-resize';
+    });
+    document.addEventListener('mousemove',e=>{
+      if(!dragging)return;
+      const vw=window.innerWidth;
+      let newW=vw-e.clientX;
+      const minW=320,maxW=Math.round(vw*0.75);
+      if(newW<minW)newW=minW;
+      if(newW>maxW)newW=maxW;
+      panel.style.width=newW+'px';
+      _csPanelWidthPx=newW;
+      csPanelApplyPadding();
+    });
+    document.addEventListener('mouseup',()=>{
+      if(!dragging)return;
+      dragging=false;
+      document.body.style.userSelect='';
+      document.body.style.cursor='';
+    });
+  });
+})();
 
 async function csDoSearch(){
   const name=gel('csSearchName').value.trim();
@@ -5991,7 +6073,16 @@ function csBackToResults(){
   gel('csTitle').textContent='🔍 CreditSafe'+(curName?' — '+curName:'');
 }
 
-function closeCsPanel(){closeModal('csModal');}
+function closeCsPanel(){
+  closeModal('csModal');
+  const panel=gel('csModal');
+  if(panel){
+    panel.classList.remove('collapsed');
+    panel.removeEventListener('click',csPanelStripClick);
+    const toggleBtn=gel('csPanelToggle');if(toggleBtn)toggleBtn.textContent='‹';
+  }
+  csPanelApplyPadding();
+}
 
 // ── TEMPLATE LIBRARY ───────────────────────────────────────
 let _editingTplId=null;
