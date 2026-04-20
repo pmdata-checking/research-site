@@ -398,10 +398,10 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <div class="ptab" id="ptab-callbacks" onclick="switchProjTab('callbacks')">Callbacks <span class="ptab-count" id="pcount-callbacks">0</span></div>
         <div class="ptab" id="ptab-done" onclick="switchProjTab('done')">Done <span class="ptab-count" id="pcount-done">0</span></div>
       </div>
-      <div id="projBriefBanner" style="display:none;background:#fef9e7;border-bottom:1px solid #f5e6a3;padding:8px 22px;font-family:var(--body);font-size:13px;color:#78591c;flex-shrink:0;">
+      <div id="projBriefBanner" style="display:none;background:#fff4d1;border-bottom:1px solid #e8c85d;border-left:4px solid var(--teal);padding:14px 22px;font-family:var(--body);font-size:14px;font-weight:600;color:#5a4200;flex-shrink:0;">
         <div id="projBriefDisplay" style="display:flex;align-items:center;gap:8px;">
           <span id="projBriefText" style="flex:1;"></span>
-          <button id="projBriefEditBtn" onclick="startEditBrief()" style="display:none;background:none;border:none;cursor:pointer;font-size:12px;color:#92400e;font-family:var(--font);font-weight:600;white-space:nowrap;">✏️ Edit</button>
+          <button id="projBriefEditBtn" onclick="startEditBrief()" style="display:none;background:var(--teal);color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;font-family:var(--font);font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;">✏️ Edit Brief</button>
         </div>
         <div id="projBriefEditor" style="display:none;gap:8px;align-items:center;position:relative;">
           <input id="projBriefInput" type="text" style="flex:1;border:1px solid #f5e6a3;border-radius:4px;padding:4px 8px;font-family:var(--body);font-size:13px;color:var(--text);" placeholder="Enter a brief for this project…" onfocus="showBriefSuggestions()" oninput="hideBriefSuggestions()">
@@ -703,6 +703,18 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div class="modal-actions">
       <button class="mbtn mbtn-danger" onclick="confirmDeleteProject()">Delete Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('deleteProjModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- BRIEF PROMPT MODAL (shown after batch upload) -->
+<div class="modal-overlay" id="briefPromptModal">
+  <div class="modal" style="width:460px;">
+    <h3>Project brief</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5;">Would you like to add a focus note for this project? A brief helps researchers prioritise and stay aligned on what matters for this batch.</p>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" onclick="closeModal('briefPromptModal');startEditBrief();">Yes, edit brief</button>
+      <button class="mbtn mbtn-cancel" onclick="closeModal('briefPromptModal')">Skip</button>
     </div>
   </div>
 </div>
@@ -3267,6 +3279,10 @@ async function doImport(){
   updateCounts();renderQ();closeModal('uploadModal');
   showToast(action==='clear'?'Records cleared':'Imported '+pendingCSV.length+' records','info');
   await loadProjects();
+  // After a batch import, prompt the brief owner to add/update the project brief
+  if(action!=='clear'&&pendingCSV.length>0&&canEditBrief()){
+    setTimeout(()=>openModal('briefPromptModal'),400);
+  }
 }
 
 function parseCSV(text){
@@ -4580,7 +4596,7 @@ async function bsRenderDashboard(){
   });
   const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
   if(!users.length){
-    container.innerHTML='<div style="background:#fff;border-radius:8px;padding:40px;text-align:center;color:var(--muted);font-size:13px;">No timesheet entries recorded for this week.</div>'+'<div style="height:16px;"></div>'+bsRenderDbProgressShell();
+    container.innerHTML='<div style="background:#fff;border-radius:8px;padding:40px;text-align:center;color:var(--muted);font-size:13px;">No timesheet entries recorded for this week.</div>';
     return;
   }
   // Per-researcher cards + team total
@@ -4591,115 +4607,7 @@ async function bsRenderDashboard(){
   // Team total
   const teamTotals=bsAggregateByDatabase(allEntries);
   const teamCard=bsRenderResearcherCard('TEAM TOTAL',teamTotals,allEntries);
-  container.innerHTML=cards+'<div style="height:8px;"></div>'+teamCard+'<div style="height:16px;"></div>'+bsRenderDbProgressShell();
-}
-
-// ─── Database Progress (Verfile stats) ─────────────────────────────
-const DB_PROGRESS_URL='https://checking.prospectmanager.co.uk/checking/api/verfile-stats/';
-const DB_PROGRESS_LABELS={wdc:'WDC'};
-let _dbProgress=null;      // {data, fetchedAt} on success
-let _dbProgressError=null; // string on failure
-let _dbProgressLoading=false;
-
-function bsFmtVfDate(s){
-  if(!s||typeof s!=='string'||s.length!==8)return'—';
-  return s;
-}
-function bsFmtPct(v){
-  if(v==null||isNaN(v))return'—';
-  return(v*100).toFixed(1)+'%';
-}
-function bsFmtNum(n){
-  if(n==null||isNaN(n))return'—';
-  return Number(n).toLocaleString('en-GB');
-}
-
-function bsRenderDbProgressBody(){
-  if(_dbProgressLoading){
-    return'<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">⏳ Loading Verfile data…</div>';
-  }
-  if(_dbProgressError){
-    return`<div style="padding:20px;color:#b00020;font-size:13px;">⚠️ Failed to load Verfile data: ${esc(_dbProgressError)}</div>`;
-  }
-  if(!_dbProgress){
-    return'<div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic;">Click "Refresh Verfile Data" to load current database progress.</div>';
-  }
-  const dbs=Object.keys(_dbProgress.data).filter(k=>k!=='last_updated');
-  const rows=dbs.map(k=>{
-    const d=_dbProgress.data[k]||{};
-    const label=DB_PROGRESS_LABELS[k]||k.toUpperCase();
-    return`<tr>
-      <td style="font-weight:700;padding:8px 10px;">${esc(label)}</td>
-      <td style="text-align:right;padding:8px 10px;">${bsFmtNum(d.total_records)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.oldest_date)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier1_oldest)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier2_oldest)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier3_oldest)}</td>
-      <td style="text-align:right;padding:8px 10px;">${bsFmtNum(d.records_left)}</td>
-      <td style="text-align:right;padding:8px 10px;font-weight:700;">${bsFmtPct(d.percent_complete)}</td>
-    </tr>`;
-  }).join('');
-  return`<table class="act-table" style="width:100%;">
-    <thead><tr>
-      <th style="text-align:left;">Database</th>
-      <th style="text-align:right;">Total Records</th>
-      <th style="text-align:center;">Date of oldest record</th>
-      <th style="text-align:center;">&gt;100 Emp (Tier 1)</th>
-      <th style="text-align:center;">21-99 Emp (Tier 2)</th>
-      <th style="text-align:center;">1-20 Emp (Tier 3)</th>
-      <th style="text-align:right;">Records left</th>
-      <th style="text-align:right;">% to complete</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-}
-
-function bsRenderDbProgressShell(){
-  const ts=_dbProgress&&_dbProgress.fetchedAt
-    ? 'Last updated: '+_dbProgress.fetchedAt.toLocaleString('en-GB')
-    : '';
-  return`<div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:16px;">
-    <div style="padding:10px 16px;background:var(--navy);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.04em;display:flex;align-items:center;gap:12px;">
-      <span style="flex:1;">DATABASE PROGRESS</span>
-      <span id="bsDbProgressStamp" style="font-weight:400;font-size:11px;opacity:.85;">${esc(ts)}</span>
-      <button class="db-btn" onclick="bsRefreshDbProgress()" style="background:rgba(255,255,255,.18);padding:4px 10px;font-size:12px;">🔄 Refresh Verfile Data</button>
-    </div>
-    <div id="bsDbProgressBody">${bsRenderDbProgressBody()}</div>
-  </div>`;
-}
-
-function bsRepaintDbProgress(){
-  const body=gel('bsDbProgressBody');
-  if(body)body.innerHTML=bsRenderDbProgressBody();
-  const stamp=gel('bsDbProgressStamp');
-  if(stamp){
-    stamp.textContent=(_dbProgress&&_dbProgress.fetchedAt)
-      ? 'Last updated: '+_dbProgress.fetchedAt.toLocaleString('en-GB')
-      : '';
-  }
-}
-
-async function bsRefreshDbProgress(){
-  if(_dbProgressLoading)return;
-  _dbProgressLoading=true;
-  _dbProgressError=null;
-  bsRepaintDbProgress();
-  try{
-    const r=await fetch(DB_PROGRESS_URL,{method:'GET',cache:'no-store'});
-    if(!r.ok){
-      let detail='HTTP '+r.status;
-      try{const j=await r.json();if(j&&j.error)detail=j.error;}catch(_){}
-      throw new Error(detail);
-    }
-    const data=await r.json();
-    _dbProgress={data,fetchedAt:new Date()};
-  }catch(e){
-    _dbProgressError=(e&&e.message)||String(e);
-    _dbProgress=null;
-  }finally{
-    _dbProgressLoading=false;
-    bsRepaintDbProgress();
-  }
+  container.innerHTML=cards+'<div style="height:8px;"></div>'+teamCard;
 }
 
 // Weekly Excel export
