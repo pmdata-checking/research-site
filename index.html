@@ -437,11 +437,12 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
           <button class="tb-go" onclick="renderQ()">Go</button>
           <button class="tb-btn" onclick="document.getElementById('qSearch').value='';renderQ()">✕</button>
           <div class="tb-spacer"></div>
-          <button class="tb-btn" id="checkVerfileBtn" onclick="checkVerfile(true)">🔍 Check Verfile</button>
+          <button class="tb-btn" id="checkVerfileBtn" style="display:none;" onclick="checkVerfile(true)">🔍 Check Verfile</button>
           <button class="tb-btn" id="removeVerfileBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="removeSelectedVerfile()">🗑 Remove Selected</button>
           <button class="tb-btn" id="checkDupBtn" onclick="checkDuplicates()" style="display:none;">⧉ Check Duplicates</button>
           <button class="tb-btn" id="deleteQBtn" style="display:none;background:rgba(192,57,43,0.7);border-color:rgba(192,57,43,0.5);" onclick="deleteList('Ready')">🗑 Delete Entire List</button>
         </div>
+        <div id="verfileProgress" style="display:none;padding:6px 14px;background:#fff;border-bottom:1px solid var(--border);"><div class="progress-bar"><div class="progress-bar-fill"></div></div><div style="text-align:center;color:var(--muted);font-size:11px;font-family:var(--font);font-weight:600;letter-spacing:.05em;margin-top:6px;">Checking Verfile…</div></div>
         <div class="list-scroll"><table class="list-table"><thead><tr id="qHead"></tr></thead><tbody id="qBody"></tbody></table></div>
       </div>
       <div class="screen" id="pview-callbacks" style="flex-direction:column;">
@@ -905,6 +906,9 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       </label>
       <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;cursor:pointer;">
         <input type="checkbox" id="permCanViewBirdseye" style="width:16px;height:16px;"> Can View Birdseye Dashboard — see team productivity analytics
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="permCanCheckVerfile" style="width:16px;height:16px;"> Can Check Verfile — flag recently verified Ready records
       </label>
     </div>
     <div class="modal-actions">
@@ -1501,6 +1505,7 @@ async function openProject(projId,initialTab){
   const teCb=gel('testExportCbBtn');if(teCb)teCb.style.display=isSuperuser?'inline-block':'none';
   const teDn=gel('testExportDnBtn');if(teDn)teDn.style.display=isSuperuser?'inline-block':'none';
   const dupBtn=gel('checkDupBtn');if(dupBtn)dupBtn.style.display=isSuperuser?'inline-block':'none';
+  const vfBtn=gel('checkVerfileBtn');if(vfBtn)vfBtn.style.display=hasPermission('can_check_verfile')?'inline-block':'none';
   gel('exportModalTitle').textContent='Export — '+currentProject.name;
   // Rename "Ready to Research" tab to "To Call" for New Records companion projects
   const isNewRecProj=currentProject.name.endsWith(' — New Records');
@@ -1513,7 +1518,7 @@ async function openProject(projId,initialTab){
   switchProjTab(startTab);updateCounts();trackPresence();
   // Reset verfile state and kick off a background check when the Ready list is active
   _verfileMatches={};_verfileSelected.clear();updateVerfileRemoveBtn();
-  if(startTab==='queue')setTimeout(()=>checkVerfile(false),200);
+  if(startTab==='queue'&&hasPermission('can_check_verfile'))setTimeout(()=>checkVerfile(false),200);
 }
 
 function goToDashboard(){
@@ -1810,7 +1815,7 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
 function renderQ(){
   const q=val('qSearch').toLowerCase();
   const rows=records.filter(r=>r._status==='Ready'&&(!currentProject||r.project_id===currentProject.id)).filter(r=>!q||Object.values(r).some(v=>String(v).toLowerCase().includes(q)));
-  renderTable(gel('qHead'),gel('qBody'),rows,q,false,true);
+  renderTable(gel('qHead'),gel('qBody'),rows,q,false,hasPermission('can_check_verfile'));
   updateVerfileRemoveBtn();
 }
 
@@ -1835,9 +1840,21 @@ function recordRef(r){
 
 async function checkVerfile(showToastOnResult){
   if(!currentProject)return;
+  if(!hasPermission('can_check_verfile')){
+    if(showToastOnResult)showToast('You do not have permission to check Verfile','error');
+    return;
+  }
   const readyRecs=records.filter(r=>r._status==='Ready'&&r.project_id===currentProject.id);
   const refs=[...new Set(readyRecs.map(recordRef).filter(Boolean))];
   if(!refs.length){_verfileMatches={};_verfileSelected.clear();if(_currentProjTabIsQueue())renderQ();return;}
+  // Progress UI (manual click only)
+  const btn=gel('checkVerfileBtn');
+  const progress=gel('verfileProgress');
+  let originalLabel='';
+  if(showToastOnResult){
+    if(btn){originalLabel=btn.textContent;btn.disabled=true;btn.textContent='⏳ Checking…';}
+    if(progress)progress.style.display='';
+  }
   try{
     const res=await fetch('https://checking.prospectmanager.co.uk/checking/api/verfile-check/',{
       method:'POST',
@@ -1862,6 +1879,11 @@ async function checkVerfile(showToastOnResult){
     }
   }catch(err){
     if(showToastOnResult)showToast('Verfile check error: '+(err.message||err),'error');
+  }finally{
+    if(showToastOnResult){
+      if(btn){btn.disabled=false;btn.textContent=originalLabel||'🔍 Check Verfile';}
+      if(progress)progress.style.display='none';
+    }
   }
 }
 
@@ -4217,6 +4239,7 @@ async function openPermissions(email,name){
   gel('permCanExport').checked=perms.includes('can_export');
   gel('permCanGenTemplate').checked=perms.includes('can_generate_template');
   gel('permCanViewBirdseye').checked=perms.includes('can_view_birdseye');
+  gel('permCanCheckVerfile').checked=perms.includes('can_check_verfile');
   openModal('permsModal');
 }
 async function savePermissions(){
@@ -4225,6 +4248,7 @@ async function savePermissions(){
   if(gel('permCanExport').checked)perms.push('can_export');
   if(gel('permCanGenTemplate').checked)perms.push('can_generate_template');
   if(gel('permCanViewBirdseye').checked)perms.push('can_view_birdseye');
+  if(gel('permCanCheckVerfile').checked)perms.push('can_check_verfile');
   // Upsert — handles both existing rows and missing rows
   const{error}=await sb.from('user_roles').upsert({user_email:_permsEmail,permissions:perms},{onConflict:'user_email'});
   if(error){showToast('Failed to save permissions: '+error.message,'error');return;}
