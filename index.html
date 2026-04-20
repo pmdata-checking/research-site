@@ -543,11 +543,13 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <button class="db-btn" id="bsViewDashboard" onclick="bsShowView('dashboard')" style="display:none;background:rgba(255,255,255,.15);">📊 Dashboard</button>
         <button class="db-btn" id="bsViewYtd" onclick="bsShowView('ytd')" style="display:none;background:rgba(255,255,255,.15);">📅 YTD</button>
         <button class="db-btn" id="bsViewCharts" onclick="bsShowView('charts')" style="display:none;background:rgba(255,255,255,.15);">📈 Charts</button>
+        <button class="db-btn" id="bsAutoModeBtn" onclick="bsToggleAutoMode()" style="display:none;background:rgba(255,255,255,.15);">🤖 Auto Mode: OFF</button>
         <button class="db-btn" id="bsExportBtn" onclick="bsExportWeek()" style="display:none;background:rgba(255,255,255,.15);">↓ Export Week</button>
         <button class="db-btn" id="bsExportYtdBtn" onclick="bsExportYtd()" style="display:none;background:rgba(255,255,255,.15);">↓ Export YTD</button>
       </div>
       <div class="dash-scroll">
         <div id="bsTimesheet" style="max-width:1400px;margin:0 auto;">
+          <div id="bsAutoBanner" style="display:none;background:#e6f4ea;border:1px solid #34a853;color:#1e6b30;border-radius:6px;padding:10px 14px;margin-bottom:10px;font-size:13px;font-weight:600;">🤖 Auto Mode is active — timesheet is being populated automatically</div>
           <div id="bsViewAsRow" style="display:none;align-items:center;gap:10px;margin-bottom:10px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 14px;">
             <span style="font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);">View researcher</span>
             <select id="bsViewAs" onchange="bsSetViewAs(this.value)" style="font-family:var(--font);font-size:12px;font-weight:600;padding:5px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);min-width:220px;"></select>
@@ -1135,6 +1137,8 @@ async function launch(){
   setupRealtime();startLockHB();setupPresence();
   // Load email templates from DB (seed if empty)
   await loadEmailTemplates();
+  // Load Birdseye Auto Mode flag
+  await bsLoadAutoMode();
   // Show Templates button for superusers
   updateNavVisibility();
   hide('loading');gel('app').style.display='flex';
@@ -2718,6 +2722,8 @@ async function sendToCall(){
   }
 
   showToast('"'+name+'" — Desk Only → moved to To Call list','done');
+  // Auto-populate Birdseye: To Call submissions count as New Companies validations
+  if(_bsAutoMode)bsAutoLogNewCompany().catch(e=>console.warn('bsAutoLogNewCompany failed',e));
   await releaseLock(currentIdx);clearInterval(lockCD);updateCounts();
   // Open next record
   const pool=records.map((rec,i)=>({rec,i})).filter(({rec,i})=>rec._status==='Ready'&&i!==currentIdx&&rec.project_id===currentProject.id);
@@ -3133,6 +3139,11 @@ async function doTagRec(status){
     await logActivity(status, r);
     // Keep the Callback sort cache current so the record slides to the bottom
     if(status==='Callback'&&r.id)_callbackTimestamps[r.id]=new Date().toISOString();
+    // Auto-populate Birdseye timesheet when the superuser toggle is ON
+    if(_bsAutoMode){
+      const resultVal=getFieldVal(r,'Result')||getFieldVal(r,'RESULT')||'';
+      bsAutoLogSubmission(status,resultVal).catch(e=>console.warn('bsAutoLogSubmission failed',e));
+    }
   }
 
   showToast(status==='Done'?'Marked as Done':status==='Callback'?'Moved to Callbacks':'Re-queued',status==='Done'?'done':status==='Callback'?'callback':'info');
@@ -4735,6 +4746,146 @@ let _bsEntries=[]; // loaded from Supabase for current week
 let _bsSaveTimers={}; // key → timeout id
 let _bsViewAsEmail=null; // when superuser views another researcher's timesheet
 let _bsViewAsName=null;
+let _bsAutoMode=false;   // auto-populate timesheet from record submissions (superuser toggle)
+
+// ── BIRDSEYE AUTO MODE ─────────────────────────────────────
+async function bsLoadAutoMode(){
+  try{
+    const{data,error}=await sb.from('config').select('value').eq('key','birdseye_auto_mode').single();
+    if(error)throw error;
+    _bsAutoMode=data&&data.value==='true';
+  }catch(e){_bsAutoMode=false;}
+  bsUpdateAutoModeUI();
+}
+function bsUpdateAutoModeUI(){
+  const btn=gel('bsAutoModeBtn');
+  if(btn){
+    btn.textContent='🤖 Auto Mode: '+(_bsAutoMode?'ON':'OFF');
+    btn.style.background=_bsAutoMode?'var(--teal)':'rgba(255,255,255,.15)';
+    btn.style.display=isSuperuser?'':'none';
+  }
+  const banner=gel('bsAutoBanner');
+  if(banner)banner.style.display=_bsAutoMode?'':'none';
+}
+async function bsToggleAutoMode(){
+  if(!isSuperuser)return;
+  const next=!_bsAutoMode;
+  const{error}=await sb.from('config').upsert({key:'birdseye_auto_mode',value:next?'true':'false'},{onConflict:'key'});
+  if(error){showToast('Failed to toggle Auto Mode: '+error.message,'error');return;}
+  _bsAutoMode=next;
+  bsUpdateAutoModeUI();
+  // If the timesheet is currently visible, re-render to apply disabled state + banner
+  if(_bsCurrentView==='timesheet')await bsRenderWeek();
+  showToast('Auto Mode '+(next?'enabled':'disabled'),'done');
+}
+
+// Map hour-of-day to a Birdseye hour slot e.g. 10:47 → "10:00 - 11:00".
+// Clamps to [8,17] so the slot label always matches BS_HOURS entries.
+function bsHourSlotNow(){
+  const h=Math.max(8,Math.min(17,new Date().getHours()));
+  return h+':00 - '+(h+1)+':00';
+}
+
+// Map project → Birdseye database name
+function bsMapDatabaseForProject(proj){
+  if(!proj)return 'Other';
+  const fam=(proj.database_family||'').toLowerCase();
+  const map={windowbase:'WindowBASE',stockistbase:'Builders Merchants',builderbase:'High End',rooflinebase:'Sealed Units',specifiersbase:'Specifiers'};
+  return map[fam]||'Other';
+}
+
+// Map submission → counter column
+function bsMapResultToField(status,resultVal){
+  if(status==='Callback')return 'callback';
+  const rv=(resultVal||'').trim();
+  const low=rv.toLowerCase();
+  if(low==='desk only'||low==='desk'||low==='desk_only')return 'desk';
+  if(/vm|ansph|\bnr\b|no[\s-]?reply|voicemail/i.test(rv))return 'vm_nr';
+  if(/refused|not\s*interested/i.test(rv))return 'refused';
+  if(/gone|not\s*wanted/i.test(rv))return 'gone';
+  return 'validated';
+}
+
+async function bsAutoLogSubmission(status,resultVal){
+  if(!_bsAutoMode)return;
+  if(!currentProject)return;
+  try{
+    const dbWanted=bsMapDatabaseForProject(currentProject);
+    const now=new Date();
+    const entryDate=bsFormatDate(now);
+    const weekEnd=bsFormatDate(bsFridayFor(now));
+    const hourSlot=bsHourSlotNow();
+    const countField=bsMapResultToField(status,resultVal);
+
+    // Fetch any existing entries for this user/date/hour
+    const{data:existingRows}=await sb.from('birdseye_entries')
+      .select('*')
+      .eq('user_email',currentUser.email)
+      .eq('entry_date',entryDate)
+      .eq('hour_slot',hourSlot);
+    const rows=existingRows||[];
+    const primaryRow=rows.find(e=>e.database_name&&e.database_name!=='New Companies');
+    const isFirstOfHour=!primaryRow;
+    const targetDb=isFirstOfHour?dbWanted:primaryRow.database_name;
+
+    // Toast on first submission of the hour
+    if(isFirstOfHour)showToast('This hour is being recorded as '+targetDb,'info');
+
+    // Bump a "Also: X (N records)" note if the submission's project db differs from the primary
+    if(!isFirstOfHour&&dbWanted!==primaryRow.database_name){
+      const existingNotes=(primaryRow.notes||'').trim();
+      const alsoPrefix='Also: '+dbWanted+' (';
+      let newNote;
+      if(existingNotes.includes(alsoPrefix)){
+        const re=new RegExp('Also: '+dbWanted.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+' \\((\\d+) records?\\)','g');
+        newNote=existingNotes.replace(re,(m,n)=>'Also: '+dbWanted+' ('+(parseInt(n,10)+1)+' records)');
+      } else {
+        const add=alsoPrefix+'1 record)';
+        newNote=existingNotes?existingNotes+'\n'+add:add;
+      }
+      await sb.from('birdseye_entries').update({notes:newNote,updated_at:new Date().toISOString()}).eq('id',primaryRow.id);
+    }
+
+    // Increment the counter on the target database row
+    const target=rows.find(e=>e.database_name===targetDb);
+    if(target){
+      const patch={[countField]:(target[countField]||0)+1,updated_at:new Date().toISOString()};
+      await sb.from('birdseye_entries').update(patch).eq('id',target.id);
+    } else {
+      const row={user_email:currentUser.email,user_name:getUserDisplayName(),entry_date:entryDate,week_ending:weekEnd,hour_slot:hourSlot,database_name:targetDb,desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,notes:null,[countField]:1,updated_at:new Date().toISOString()};
+      await sb.from('birdseye_entries').upsert(row,{onConflict:'user_email,entry_date,hour_slot,database_name'});
+    }
+  }catch(e){console.warn('bsAutoLogSubmission failed',e);}
+}
+
+// Separate path for "To Call" sends — always counted as a New Companies validated tick
+async function bsAutoLogNewCompany(){
+  if(!_bsAutoMode)return;
+  try{
+    const now=new Date();
+    const entryDate=bsFormatDate(now);
+    const weekEnd=bsFormatDate(bsFridayFor(now));
+    const hourSlot=bsHourSlotNow();
+    const{data:existingRows}=await sb.from('birdseye_entries')
+      .select('*')
+      .eq('user_email',currentUser.email)
+      .eq('entry_date',entryDate)
+      .eq('hour_slot',hourSlot)
+      .eq('database_name','New Companies');
+    const target=existingRows&&existingRows[0];
+    if(target){
+      await sb.from('birdseye_entries').update({validated:(target.validated||0)+1,updated_at:new Date().toISOString()}).eq('id',target.id);
+    } else {
+      await sb.from('birdseye_entries').upsert({
+        user_email:currentUser.email,user_name:getUserDisplayName(),
+        entry_date:entryDate,week_ending:weekEnd,hour_slot:hourSlot,
+        database_name:'New Companies',
+        desk:0,called:0,validated:1,vm_nr:0,refused:0,callback:0,gone:0,notes:null,
+        updated_at:new Date().toISOString()
+      },{onConflict:'user_email,entry_date,hour_slot,database_name'});
+    }
+  }catch(e){console.warn('bsAutoLogNewCompany failed',e);}
+}
 
 function bsFridayFor(date){
   // Returns the Friday that ENDS the week containing `date`.
@@ -4975,8 +5126,11 @@ function bsRenderDay(){
   const weekEndStr=bsFormatDate(_bsWeekEnding);
 
   const viewingOther=bsIsViewingOther();
-  const readOnly=!bsIsCurrentWeek()||viewingOther;
+  const autoLocked=_bsAutoMode; // auto mode disables all inputs except Notes
+  const readOnly=!bsIsCurrentWeek()||viewingOther||autoLocked;
   const disAttr=readOnly?' disabled':'';
+  // Notes field stays editable under auto mode (researcher can annotate freely)
+  const notesDisAttr=(!bsIsCurrentWeek()||viewingOther)?' disabled':'';
   // Order of count fields as they appear in the Timesheet — New Co slotted after Done
   // (new_co is a pseudo-field; stored as a separate birdseye_entry with database_name='New Companies')
   const TS_FIELD_ORDER=['desk','called','validated','new_co','vm_nr','refused','callback','gone'];
@@ -5003,10 +5157,10 @@ function bsRenderDay(){
       <td style="font-size:12px;font-weight:700;white-space:nowrap;padding:6px 8px;">${esc(hour)}</td>
       <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;"${disAttr} onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DB_DROPDOWN_OPTIONS.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
       ${TS_FIELD_ORDER.map(cellField).join('')}
-      <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
+      <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}"${notesDisAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
     </tr>`;
   }).join('');
-  const roMsg=viewingOther?('Viewing '+_bsViewAsName+'\'s timesheet'):'You are viewing a previous week. Entries cannot be edited.';
+  const roMsg=viewingOther?('Viewing '+_bsViewAsName+'\'s timesheet'):(autoLocked?'Auto Mode is active — entries are being populated automatically. Only Notes is editable.':'You are viewing a previous week. Entries cannot be edited.');
   const roBanner=readOnly?`<div style="background:#fff7e6;border:1px solid #ffb366;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#8a4b00;"><strong>Read-only:</strong> ${esc(roMsg)}</div>`:'';
 
   // Daily summary per database — New Companies rendered as its own row with the
@@ -5841,10 +5995,22 @@ function bsRowChanged(dateStr,weekEndStr,hour,tr){
   const notes=(tr.querySelector('[data-field="notes"]').value||'').trim();
   // Live daily summary update (includes the unsaved row)
   bsRecalcDailySummary(dateStr,{hour,dbName,counts,newCo});
-  // Decide what's worth saving
-  const regHasContent=dbName&&(BS_COUNT_FIELDS.some(f=>counts[f])||notes);
   const timerKey=dateStr+'__'+hour;
   if(_bsSaveTimers[timerKey])clearTimeout(_bsSaveTimers[timerKey]);
+  // Under Auto Mode the only editable input is Notes — patch notes onto the existing
+  // primary row (the auto-logger creates one on first submission of the hour).
+  if(_bsAutoMode){
+    _bsSaveTimers[timerKey]=setTimeout(async()=>{
+      const existing=_bsEntries.find(e=>e.entry_date===dateStr&&e.hour_slot===hour&&e.database_name&&e.database_name!==BS_NEW_CO);
+      if(!existing)return; // nothing to annotate yet
+      const{error}=await sb.from('birdseye_entries').update({notes:notes||null,updated_at:new Date().toISOString()}).eq('id',existing.id);
+      if(error){console.error('Birdseye notes save error:',error);return;}
+      existing.notes=notes||null;
+    },500);
+    return;
+  }
+  // Decide what's worth saving
+  const regHasContent=dbName&&(BS_COUNT_FIELDS.some(f=>counts[f])||notes);
   if(!regHasContent&&!newCo)return;
   _bsSaveTimers[timerKey]=setTimeout(async()=>{
     const base={user_email:currentUser.email,user_name:getUserDisplayName(),entry_date:dateStr,week_ending:weekEndStr,hour_slot:hour,updated_at:new Date().toISOString()};
