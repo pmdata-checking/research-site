@@ -398,10 +398,10 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <div class="ptab" id="ptab-callbacks" onclick="switchProjTab('callbacks')">Callbacks <span class="ptab-count" id="pcount-callbacks">0</span></div>
         <div class="ptab" id="ptab-done" onclick="switchProjTab('done')">Done <span class="ptab-count" id="pcount-done">0</span></div>
       </div>
-      <div id="projBriefBanner" style="display:none;background:#fef9e7;border-bottom:1px solid #f5e6a3;padding:8px 22px;font-family:var(--body);font-size:13px;color:#78591c;flex-shrink:0;">
+      <div id="projBriefBanner" style="display:none;background:#fff4d1;border-bottom:1px solid #e8c85d;border-left:4px solid var(--teal);padding:14px 22px;font-family:var(--body);font-size:14px;font-weight:600;color:#5a4200;flex-shrink:0;">
         <div id="projBriefDisplay" style="display:flex;align-items:center;gap:8px;">
           <span id="projBriefText" style="flex:1;"></span>
-          <button id="projBriefEditBtn" onclick="startEditBrief()" style="display:none;background:none;border:none;cursor:pointer;font-size:12px;color:#92400e;font-family:var(--font);font-weight:600;white-space:nowrap;">✏️ Edit</button>
+          <button id="projBriefEditBtn" onclick="startEditBrief()" style="display:none;background:var(--teal);color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;font-family:var(--font);font-weight:700;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;">✏️ Edit Brief</button>
         </div>
         <div id="projBriefEditor" style="display:none;gap:8px;align-items:center;position:relative;">
           <input id="projBriefInput" type="text" style="flex:1;border:1px solid #f5e6a3;border-radius:4px;padding:4px 8px;font-family:var(--body);font-size:13px;color:var(--text);" placeholder="Enter a brief for this project…" onfocus="showBriefSuggestions()" oninput="hideBriefSuggestions()">
@@ -703,6 +703,18 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div class="modal-actions">
       <button class="mbtn mbtn-danger" onclick="confirmDeleteProject()">Delete Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('deleteProjModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- BRIEF PROMPT MODAL (shown after batch upload) -->
+<div class="modal-overlay" id="briefPromptModal">
+  <div class="modal" style="width:460px;">
+    <h3>Project brief</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.5;">Would you like to add a focus note for this project? A brief helps researchers prioritise and stay aligned on what matters for this batch.</p>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" onclick="closeModal('briefPromptModal');startEditBrief();">Yes, edit brief</button>
+      <button class="mbtn mbtn-cancel" onclick="closeModal('briefPromptModal')">Skip</button>
     </div>
   </div>
 </div>
@@ -3267,6 +3279,10 @@ async function doImport(){
   updateCounts();renderQ();closeModal('uploadModal');
   showToast(action==='clear'?'Records cleared':'Imported '+pendingCSV.length+' records','info');
   await loadProjects();
+  // After a batch import, prompt the brief owner to add/update the project brief
+  if(action!=='clear'&&pendingCSV.length>0&&canEditBrief()){
+    setTimeout(()=>openModal('briefPromptModal'),400);
+  }
 }
 
 function parseCSV(text){
