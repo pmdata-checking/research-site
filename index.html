@@ -4599,13 +4599,16 @@ function bsRenderWeekSummary(container){
 }
 
 // Fetch ALL users' entries for the current week (dashboard + export)
+// Emails excluded from Dashboard / YTD / exports — superusers who don't log timesheets
+const BS_EXCLUDE_EMAILS=new Set(['robert@prospectmanager.co.uk']);
+
 async function bsFetchWeekAll(){
   const dates=bsDayDates(_bsWeekEnding);
   const startDate=bsFormatDate(dates.fri);
   const endDate=bsFormatDate(dates.thu);
   const{data,error}=await sb.from('birdseye_entries').select('*').gte('entry_date',startDate).lte('entry_date',endDate).order('user_name');
   if(error){showToast('Failed to load dashboard data: '+error.message,'error');return[];}
-  return data||[];
+  return(data||[]).filter(e=>!BS_EXCLUDE_EMAILS.has((e.user_email||'').toLowerCase()));
 }
 
 // Aggregate entries into per-database totals with hours and rate
@@ -4869,7 +4872,7 @@ async function bsFetchYtdAll(){
   const todayStr=bsFormatDate(new Date());
   const{data,error}=await sb.from('birdseye_entries').select('*').gte('entry_date',startDate).lte('entry_date',todayStr).order('user_name');
   if(error){showToast('Failed to load YTD data: '+error.message,'error');return[];}
-  return data||[];
+  return(data||[]).filter(e=>!BS_EXCLUDE_EMAILS.has((e.user_email||'').toLowerCase()));
 }
 
 async function bsRenderYtd(){
