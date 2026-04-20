@@ -548,11 +548,17 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       </div>
       <div class="dash-scroll">
         <div id="bsTimesheet" style="max-width:1400px;margin:0 auto;">
+          <div id="bsViewAsRow" style="display:none;align-items:center;gap:10px;margin-bottom:10px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 14px;">
+            <span style="font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);">View researcher</span>
+            <select id="bsViewAs" onchange="bsSetViewAs(this.value)" style="font-family:var(--font);font-size:12px;font-weight:600;padding:5px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);min-width:220px;"></select>
+            <span id="bsViewAsLabel" style="margin-left:auto;font-family:var(--font);font-size:12px;font-weight:700;color:var(--navy);"></span>
+          </div>
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--navy);padding:14px 18px;border-radius:8px;color:#fff;">
             <button class="db-btn" onclick="bsPrevWeek()" style="background:rgba(255,255,255,.15);">← Previous Week</button>
             <div style="flex:1;text-align:center;">
               <div id="bsWeekEnding" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;"></div>
             </div>
+            <button class="db-btn" onclick="bsCurrentWeek()" style="background:rgba(255,255,255,.15);">This Week</button>
             <button class="db-btn" onclick="bsNextWeek()" style="background:rgba(255,255,255,.15);">Next Week →</button>
           </div>
           <div id="bsDayTabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);"></div>
@@ -4721,6 +4727,8 @@ let _bsWeekEnding=null; // Friday date object
 let _bsSelectedDay='fri'; // 'fri','mon','tue','wed','thu','week'
 let _bsEntries=[]; // loaded from Supabase for current week
 let _bsSaveTimers={}; // key → timeout id
+let _bsViewAsEmail=null; // when superuser views another researcher's timesheet
+let _bsViewAsName=null;
 
 function bsFridayFor(date){
   // Returns the Friday that ENDS the week containing `date`.
@@ -4766,6 +4774,11 @@ async function goToBirdseye(){
   const vtCh=gel('bsViewCharts');if(vtCh)vtCh.style.display=canView?'':'none';
   const xb=gel('bsExportBtn');if(xb)xb.style.display=canView?'':'none';
   const xyt=gel('bsExportYtdBtn');if(xyt)xyt.style.display=canView?'':'none';
+  // Researcher selector (superuser / can_view_birdseye only)
+  _bsViewAsEmail=null;_bsViewAsName=null;
+  const viewAsRow=gel('bsViewAsRow');
+  if(viewAsRow)viewAsRow.style.display=canView?'flex':'none';
+  if(canView)await bsPopulateViewAs();
   // Default week ending = next Friday
   _bsWeekEnding=bsFridayFor(new Date());
   // Default day = today's day if it falls in the week, else Friday
@@ -4815,14 +4828,72 @@ function bsIsCurrentWeek(){
   return bsFormatDate(_bsWeekEnding)===bsFormatDate(curFri);
 }
 
+// Populate the researcher dropdown from user_roles, excluding BS_EXCLUDE_EMAILS
+async function bsPopulateViewAs(){
+  const sel=gel('bsViewAs');if(!sel)return;
+  // Preserve current selection if already populated
+  const prev=sel.value||currentUser.email;
+  try{
+    const{data,error}=await sb.from('user_roles').select('user_email,user_name');
+    if(error)throw error;
+    const list=(data||[])
+      .filter(u=>u.user_email&&!BS_EXCLUDE_EMAILS.has(u.user_email.toLowerCase()))
+      .map(u=>({email:u.user_email,name:(u.user_name||u.user_email).trim()}))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    // Ensure the logged-in user appears (useful fallback if user_roles is missing name)
+    if(!list.some(u=>u.email===currentUser.email)){
+      list.unshift({email:currentUser.email,name:(getUserDisplayName()||currentUser.email)+' (me)'});
+    }
+    sel.innerHTML=list.map(u=>{
+      const isMe=u.email===currentUser.email;
+      return `<option value="${esc(u.email)}">${esc(u.name)}${isMe?' (me)':''}</option>`;
+    }).join('');
+    sel.value=prev||currentUser.email;
+  }catch(e){
+    console.warn('bsPopulateViewAs failed',e);
+    sel.innerHTML=`<option value="${esc(currentUser.email)}">${esc(getUserDisplayName())} (me)</option>`;
+  }
+}
+
+async function bsSetViewAs(email){
+  const sel=gel('bsViewAs');
+  const opt=sel?sel.options[sel.selectedIndex]:null;
+  const name=opt?opt.textContent.replace(/ \(me\)$/,'').trim():email;
+  if(!email||email===currentUser.email){
+    _bsViewAsEmail=null;_bsViewAsName=null;
+  } else {
+    _bsViewAsEmail=email;_bsViewAsName=name;
+  }
+  // Switching researcher resets to current week
+  _bsWeekEnding=bsFridayFor(new Date());
+  const today=new Date();today.setHours(0,0,0,0);
+  const dow=today.getDay();
+  const dayMap={5:'fri',1:'mon',2:'tue',3:'wed',4:'thu'};
+  _bsSelectedDay=dayMap[dow]||'fri';
+  await bsRenderWeek();
+}
+
+function bsIsViewingOther(){return _bsViewAsEmail&&_bsViewAsEmail!==currentUser.email;}
+
 async function bsRenderWeek(){
-  const nm=(gel('userLabel')&&gel('userLabel').textContent.trim())||getUserDisplayName();
+  const viewingOther=bsIsViewingOther();
+  const nm=viewingOther?_bsViewAsName:((gel('userLabel')&&gel('userLabel').textContent.trim())||getUserDisplayName());
   gel('bsWeekEnding').textContent=nm+' — Week ending '+bsFormatNice(_bsWeekEnding);
-  // Load entries for this week
+  // "Viewing: X" badge next to the dropdown
+  const viewAsLbl=gel('bsViewAsLabel');
+  if(viewAsLbl)viewAsLbl.textContent=viewingOther?('Viewing: '+_bsViewAsName):'';
+  // Hide Export Week button when viewing another researcher
+  const xb=gel('bsExportBtn');
+  if(xb){
+    const canView=isSuperuser||hasPermission('can_view_birdseye');
+    xb.style.display=(canView&&_bsCurrentView==='timesheet'&&!viewingOther)?'':'none';
+  }
+  // Load entries for this week — email depends on view-as state
+  const emailToFetch=viewingOther?_bsViewAsEmail:currentUser.email;
   const dates=bsDayDates(_bsWeekEnding);
   const startDate=bsFormatDate(dates.fri);
   const endDate=bsFormatDate(dates.thu);
-  const{data,error}=await sb.from('birdseye_entries').select('*').eq('user_email',currentUser.email).gte('entry_date',startDate).lte('entry_date',endDate);
+  const{data,error}=await sb.from('birdseye_entries').select('*').eq('user_email',emailToFetch).gte('entry_date',startDate).lte('entry_date',endDate);
   if(error){showToast('Failed to load timesheet: '+error.message,'error');_bsEntries=[];}
   else _bsEntries=data||[];
   bsRenderTabs();
@@ -4861,7 +4932,8 @@ function bsRenderDay(){
   const dateStr=bsFormatDate(date);
   const weekEndStr=bsFormatDate(_bsWeekEnding);
 
-  const readOnly=!bsIsCurrentWeek();
+  const viewingOther=bsIsViewingOther();
+  const readOnly=!bsIsCurrentWeek()||viewingOther;
   const disAttr=readOnly?' disabled':'';
   // Build hour rows. "called" is read-only (auto = validated+vm_nr+refused+callback+gone)
   const rows=BS_HOURS.map(hour=>{
@@ -4881,7 +4953,8 @@ function bsRenderDay(){
       <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
     </tr>`;
   }).join('');
-  const roBanner=readOnly?`<div style="background:#fff7e6;border:1px solid #ffb366;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#8a4b00;"><strong>Read-only:</strong> You are viewing a previous week. Entries cannot be edited.</div>`:'';
+  const roMsg=viewingOther?('Viewing '+_bsViewAsName+'\'s timesheet'):'You are viewing a previous week. Entries cannot be edited.';
+  const roBanner=readOnly?`<div style="background:#fff7e6;border:1px solid #ffb366;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#8a4b00;"><strong>Read-only:</strong> ${esc(roMsg)}</div>`:'';
 
   // Daily summary per database
   const dayTotals={};
@@ -5654,6 +5727,7 @@ function bsRecalcDailySummary(dateStr,liveRow){
 }
 
 function bsRowChanged(dateStr,weekEndStr,hour,tr){
+  if(bsIsViewingOther())return; // guard: superuser viewing another researcher — read-only
   if(!bsIsCurrentWeek())return; // guard: read-only on past weeks
   const dbSel=tr.querySelector('select');
   const dbName=dbSel.value;
