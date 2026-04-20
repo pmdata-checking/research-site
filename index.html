@@ -4840,8 +4840,6 @@ async function bsPopulateViewAs(){
       sb.from('birdseye_entries').select('user_email,user_name'),
       sb.from('user_roles').select('user_email')
     ]);
-    console.log('[bsPopulateViewAs] birdseye_entries rows=',entriesR?.data?.length,'error=',entriesR?.error);
-    console.log('[bsPopulateViewAs] user_roles rows=',rolesR?.data?.length,'error=',rolesR?.error);
 
     const byEmail=new Map(); // email (lowercased key) → {email, name}
     (entriesR?.data||[]).forEach(r=>{
@@ -4862,7 +4860,6 @@ async function bsPopulateViewAs(){
         byEmail.set(key,{email:r.user_email,name});
       }
     });
-    console.log('[bsPopulateViewAs] merged candidates=',[...byEmail.values()]);
 
     const list=[...byEmail.values()]
       .filter(u=>!BS_EXCLUDE_EMAILS.has(u.email.toLowerCase()))
@@ -4871,7 +4868,6 @@ async function bsPopulateViewAs(){
     if(!list.some(u=>u.email.toLowerCase()===currentUser.email.toLowerCase())){
       list.unshift({email:currentUser.email,name:getUserDisplayName()||currentUser.email});
     }
-    console.log('[bsPopulateViewAs] final list=',list);
 
     sel.innerHTML=list.map(u=>{
       const isMe=u.email.toLowerCase()===currentUser.email.toLowerCase();
