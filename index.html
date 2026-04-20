@@ -4921,6 +4921,44 @@ async function bsExportYtd(){
   aoa.push([]);
   const merges=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}},{s:{r:1,c:0},e:{r:1,c:headers.length-1}}];
 
+  // Build the Verfile "Database Progress" section as AOA rows.
+  // Returns the rows plus any merges relative to a base row index.
+  function buildVerfileSection(){
+    const vHeaders=['Database','Total Records','Date of oldest record','>100 Emp (Tier 1)','21-99 Emp (Tier 2)','1-20 Emp (Tier 3)','Records left','% to complete'];
+    const rows=[];const localMerges=[];
+    const titleRow=['DATABASE PROGRESS'];while(titleRow.length<vHeaders.length)titleRow.push('');
+    rows.push(titleRow);localMerges.push({relRow:0,span:vHeaders.length});
+    if(!_dbProgress||!_dbProgress.data){
+      rows.push(['Verfile data not loaded — click Refresh Verfile Data in the dashboard before exporting']);
+      localMerges.push({relRow:1,span:vHeaders.length});
+      rows.push([]);
+      return{rows,localMerges};
+    }
+    rows.push(vHeaders);
+    const dbs=Object.keys(_dbProgress.data).filter(k=>k!=='last_updated');
+    dbs.forEach(k=>{
+      const d=_dbProgress.data[k]||{};
+      const label=DB_PROGRESS_LABELS[k]||k.toUpperCase();
+      const pct=(d.percent_complete==null||isNaN(d.percent_complete))?'':(Number(d.percent_complete)*100).toFixed(1)+'%';
+      rows.push([
+        label,
+        d.total_records??'',
+        d.oldest_date||'',
+        d.tier1_oldest||'',
+        d.tier2_oldest||'',
+        d.tier3_oldest||'',
+        d.records_left??'',
+        pct
+      ]);
+    });
+    const ts=_dbProgress.fetchedAt?_dbProgress.fetchedAt.toLocaleString('en-GB'):'unknown';
+    rows.push(['Last updated: '+ts]);
+    localMerges.push({relRow:rows.length-1,span:vHeaders.length});
+    rows.push([]);
+    return{rows,localMerges};
+  }
+
+  let georgiaRendered=false;
   users.forEach(u=>{
     const isGeorgia=/georgia/i.test(u.name);
     // Researcher name row
@@ -4952,7 +4990,22 @@ async function bsExportYtd(){
     if(isGeorgia){while(totalRow.length<11)totalRow.push('');totalRow.push('TOTAL','','');}
     aoa.push(totalRow);
     aoa.push([]);
+    // Inject Verfile section directly after Georgia's block
+    if(isGeorgia){
+      const{rows:vRows,localMerges:vMerges}=buildVerfileSection();
+      const base=aoa.length;
+      vRows.forEach(r=>aoa.push(r));
+      vMerges.forEach(m=>merges.push({s:{r:base+m.relRow,c:0},e:{r:base+m.relRow,c:m.span-1}}));
+      georgiaRendered=true;
+    }
   });
+  // Fallback: if Georgia wasn't in the data, still inject before Team Total
+  if(!georgiaRendered){
+    const{rows:vRows,localMerges:vMerges}=buildVerfileSection();
+    const base=aoa.length;
+    vRows.forEach(r=>aoa.push(r));
+    vMerges.forEach(m=>merges.push({s:{r:base+m.relRow,c:0},e:{r:base+m.relRow,c:m.span-1}}));
+  }
 
   // Team total
   const teamTotals=bsAggregateByDatabase(entries);
@@ -4972,7 +5025,7 @@ async function bsExportYtd(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges']=merges;
-  ws['!cols']=[{wch:22},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},{wch:2},{wch:18},{wch:12},{wch:12}];
+  ws['!cols']=[{wch:22},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:14},{wch:14},{wch:8},{wch:8},{wch:2},{wch:18},{wch:12},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws,'YTD '+year);
   const fname='Birdseye_YTD_'+todayStr+'.xlsx';
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
