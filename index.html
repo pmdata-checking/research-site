@@ -4720,9 +4720,15 @@ function exportActivityCSV(){
 
 // ── BIRDSEYE TIMESHEET ─────────────────────────────────────
 const BS_DATABASES=['WindowBASE','Sealed Units','High End','Builders Merchants','Specifiers','Other','New Companies'];
+const BS_NEW_CO='New Companies';
+// Timesheet dropdown excludes New Companies — it has its own dedicated input column
+const BS_DB_DROPDOWN_OPTIONS=BS_DATABASES.filter(d=>d!==BS_NEW_CO);
 const BS_HOURS=['8:00 - 9:00','9:00 - 10:00','10:00 - 11:00','11:00 - 12:00','12:00 - 13:00','13:00 - 14:00','14:00 - 15:00','15:00 - 16:00','16:00 - 17:00','17:00 - 18:00'];
 const BS_COUNT_FIELDS=['desk','called','validated','vm_nr','refused','callback','gone'];
 const BS_COUNT_LABELS={desk:'Desk',called:'Called',validated:'Validated',vm_nr:'VM/NR',refused:'Refused',callback:'Callback',gone:'Gone'};
+// Timesheet-only column labels — "Validated" displayed as "Done". Other views
+// (Dashboard, YTD, Charts, exports) continue to use BS_COUNT_LABELS.
+const BS_TIMESHEET_LABELS={desk:'Desk',called:'Called',validated:'Done',vm_nr:'VM/NR',refused:'Refused',callback:'Callback',gone:'Gone'};
 let _bsWeekEnding=null; // Friday date object
 let _bsSelectedDay='fri'; // 'fri','mon','tue','wed','thu','week'
 let _bsEntries=[]; // loaded from Supabase for current week
@@ -4864,8 +4870,9 @@ async function bsPopulateViewAs(){
     const list=[...byEmail.values()]
       .filter(u=>!BS_EXCLUDE_EMAILS.has(u.email.toLowerCase()))
       .sort((a,b)=>a.name.localeCompare(b.name));
-    // Ensure the logged-in user is in the list (even if not in user_roles or entries yet)
-    if(!list.some(u=>u.email.toLowerCase()===currentUser.email.toLowerCase())){
+    // If the logged-in user is NOT in the excluded set, ensure they appear in the list
+    const currentExcluded=BS_EXCLUDE_EMAILS.has((currentUser.email||'').toLowerCase());
+    if(!currentExcluded&&!list.some(u=>u.email.toLowerCase()===currentUser.email.toLowerCase())){
       list.unshift({email:currentUser.email,name:getUserDisplayName()||currentUser.email});
     }
 
@@ -4873,7 +4880,17 @@ async function bsPopulateViewAs(){
       const isMe=u.email.toLowerCase()===currentUser.email.toLowerCase();
       return `<option value="${esc(u.email)}">${esc(u.name)}${isMe?' (me)':''}</option>`;
     }).join('');
-    sel.value=prev||currentUser.email;
+    // Default: keep previous selection if still valid; otherwise the logged-in user (if present)
+    // else the first researcher alphabetically.
+    const validValues=new Set(list.map(u=>u.email));
+    let defaultVal=prev&&validValues.has(prev)?prev:(validValues.has(currentUser.email)?currentUser.email:(list[0]?.email||''));
+    sel.value=defaultVal;
+    // If the logged-in user is excluded (e.g. Robert) and the default is someone else,
+    // flip view-as mode so the fetched timesheet matches the dropdown.
+    if(currentExcluded&&defaultVal&&defaultVal!==currentUser.email){
+      const opt=list.find(u=>u.email===defaultVal);
+      _bsViewAsEmail=defaultVal;_bsViewAsName=opt?opt.name:defaultVal;
+    }
   }catch(e){
     console.warn('bsPopulateViewAs failed',e);
     sel.innerHTML=`<option value="${esc(currentUser.email)}">${esc(getUserDisplayName())} (me)</option>`;
@@ -4960,34 +4977,49 @@ function bsRenderDay(){
   const viewingOther=bsIsViewingOther();
   const readOnly=!bsIsCurrentWeek()||viewingOther;
   const disAttr=readOnly?' disabled':'';
-  // Build hour rows. "called" is read-only (auto = validated+vm_nr+refused+callback+gone)
+  // Order of count fields as they appear in the Timesheet — New Co slotted after Done
+  // (new_co is a pseudo-field; stored as a separate birdseye_entry with database_name='New Companies')
+  const TS_FIELD_ORDER=['desk','called','validated','new_co','vm_nr','refused','callback','gone'];
+  const TS_LABEL=f=>f==='new_co'?'New Co':BS_TIMESHEET_LABELS[f];
+  // Build hour rows. "called" is read-only (auto = validated+vm_nr+refused+callback+gone).
+  // Each hour can have up to TWO birdseye_entries: one for the selected database (regular)
+  // and one for 'New Companies' (counted via the dedicated new_co column).
   const rows=BS_HOURS.map(hour=>{
     const existing=_bsEntries.filter(e=>e.entry_date===dateStr&&e.hour_slot===hour);
-    const ent=existing[0]||{database_name:'',desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,notes:''};
+    const ent=existing.find(e=>e.database_name&&e.database_name!==BS_NEW_CO)||{database_name:'',desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,notes:''};
+    const ncEnt=existing.find(e=>e.database_name===BS_NEW_CO);
+    const newCoVal=ncEnt?(ncEnt.validated||0):0;
     const cellField=f=>{
       if(f==='called'){
         const calc=(ent.validated||0)+(ent.vm_nr||0)+(ent.refused||0)+(ent.callback||0)+(ent.gone||0);
         return`<td style="padding:4px 6px;"><input type="number" readonly class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;background:var(--off);color:var(--muted);cursor:not-allowed;" data-field="called" value="${calc||''}"></td>`;
       }
+      if(f==='new_co'){
+        return`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="new_co" value="${newCoVal||''}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`;
+      }
       return`<td style="padding:4px 6px;"><input type="number" min="0" class="modal-input" style="font-size:12px;padding:5px 8px;width:60px;text-align:center;" data-field="${f}" value="${ent[f]||''}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>`;
     };
     return`<tr data-hour="${esc(hour)}">
       <td style="font-size:12px;font-weight:700;white-space:nowrap;padding:6px 8px;">${esc(hour)}</td>
-      <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;"${disAttr} onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DATABASES.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
-      ${BS_COUNT_FIELDS.map(cellField).join('')}
+      <td style="padding:4px 6px;"><select class="modal-input" style="font-size:12px;padding:5px 8px;min-width:140px;"${disAttr} onchange="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"><option value="">—</option>${BS_DB_DROPDOWN_OPTIONS.map(db=>`<option value="${esc(db)}"${ent.database_name===db?' selected':''}>${esc(db)}</option>`).join('')}</select></td>
+      ${TS_FIELD_ORDER.map(cellField).join('')}
       <td style="padding:4px 6px;"><input type="text" class="modal-input" style="font-size:12px;padding:5px 8px;width:100%;" data-field="notes" value="${esc(ent.notes||'')}"${disAttr} oninput="bsRowChanged('${esc(dateStr)}','${esc(weekEndStr)}','${esc(hour)}',this.closest('tr'))"></td>
     </tr>`;
   }).join('');
   const roMsg=viewingOther?('Viewing '+_bsViewAsName+'\'s timesheet'):'You are viewing a previous week. Entries cannot be edited.';
   const roBanner=readOnly?`<div style="background:#fff7e6;border:1px solid #ffb366;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#8a4b00;"><strong>Read-only:</strong> ${esc(roMsg)}</div>`:'';
 
-  // Daily summary per database
+  // Daily summary per database — New Companies rendered as its own row with the
+  // count displayed in the dedicated New Co column.
   const dayTotals={};
   _bsEntries.filter(e=>e.entry_date===dateStr&&e.database_name).forEach(e=>{
-    if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-    BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});
+    if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+    if(e.database_name===BS_NEW_CO){dayTotals[e.database_name].new_co+=(e.validated||0);}
+    else{BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});}
   });
-  const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
+  const summaryCell=(t,f)=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`;
+  const summaryRow=(db,t)=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${TS_FIELD_ORDER.map(f=>summaryCell(t,f)).join('')}</tr>`;
+  const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>summaryRow(db,t)).join(''):`<tr><td colspan="9" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
 
   container.innerHTML=`
     ${roBanner}
@@ -4996,7 +5028,7 @@ function bsRenderDay(){
         <thead><tr>
           <th style="width:110px;">Hour</th>
           <th>Database</th>
-          ${BS_COUNT_FIELDS.map(f=>`<th style="text-align:center;">${BS_COUNT_LABELS[f]}</th>`).join('')}
+          ${TS_FIELD_ORDER.map(f=>`<th style="text-align:center;">${TS_LABEL(f)}</th>`).join('')}
           <th>Notes</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -5005,7 +5037,7 @@ function bsRenderDay(){
     <div style="background:#fff;border-radius:8px;overflow:hidden;">
       <div style="padding:10px 14px;background:var(--off);font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);">Daily Summary</div>
       <table class="act-table" style="width:100%;">
-        <thead><tr><th>Database</th>${BS_COUNT_FIELDS.map(f=>`<th style="text-align:center;">${BS_COUNT_LABELS[f]}</th>`).join('')}</tr></thead>
+        <thead><tr><th>Database</th>${TS_FIELD_ORDER.map(f=>`<th style="text-align:center;">${TS_LABEL(f)}</th>`).join('')}</tr></thead>
         <tbody>${summaryRows}</tbody>
       </table>
     </div>`;
@@ -5014,20 +5046,51 @@ function bsRenderDay(){
 function bsRenderWeekSummary(container){
   const dates=bsDayDates(_bsWeekEnding);
   const dateList=[bsFormatDate(dates.fri),bsFormatDate(dates.mon),bsFormatDate(dates.tue),bsFormatDate(dates.wed),bsFormatDate(dates.thu)];
+  const TS_FIELD_ORDER=['desk','called','validated','new_co','vm_nr','refused','callback','gone'];
+  const TS_LABEL=f=>f==='new_co'?'New Co':BS_TIMESHEET_LABELS[f];
+  // Aggregate counts and distinct hour slots per database across the week
   const weekTotals={};
+  const hoursByDb={};
   _bsEntries.filter(e=>dateList.includes(e.entry_date)&&e.database_name).forEach(e=>{
-    if(!weekTotals[e.database_name])weekTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-    BS_COUNT_FIELDS.forEach(f=>{weekTotals[e.database_name][f]+=(e[f]||0);});
+    if(!weekTotals[e.database_name]){
+      weekTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+      hoursByDb[e.database_name]=new Set();
+    }
+    if(e.database_name===BS_NEW_CO){weekTotals[e.database_name].new_co+=(e.validated||0);}
+    else{BS_COUNT_FIELDS.forEach(f=>{weekTotals[e.database_name][f]+=(e[f]||0);});}
+    // Historical rows carry their hours column directly; regular rows count distinct hour slots
+    if(e.hour_slot==='historical')hoursByDb[e.database_name].add('__hist__'+(e.hours||0)+'__'+e.entry_date);
+    else hoursByDb[e.database_name].add(e.entry_date+'__'+e.hour_slot);
   });
-  const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-  Object.values(weekTotals).forEach(t=>BS_COUNT_FIELDS.forEach(f=>{grand[f]+=t[f];}));
-  const rows=Object.keys(weekTotals).length?Object.entries(weekTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:8px 10px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:8px 10px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--muted);font-style:italic;">No entries this week</td></tr>`;
-  const totalRow=Object.keys(weekTotals).length?`<tr style="background:var(--off);font-weight:800;"><td style="padding:10px;">TOTAL</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:10px;">${grand[f]||0}</td>`).join('')}</tr>`:'';
+  function hoursForDb(db){
+    // Sum historical hours + count of distinct real hour slots
+    let h=0;const hs=hoursByDb[db]||new Set();
+    hs.forEach(key=>{
+      if(key.startsWith('__hist__'))h+=parseInt(key.split('__')[2]||'0',10)||0;
+      else h+=1;
+    });
+    return h;
+  }
+  function rateAll(t,h){if(!h)return'';return((t.desk+t.called+t.validated+t.new_co+t.vm_nr+t.refused+t.callback+t.gone)/h).toFixed(2);}
+  function rateDV(t,h){if(!h)return'';return((t.desk+t.validated+t.new_co)/h).toFixed(2);}
+  // Grand totals across all databases
+  const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+  Object.values(weekTotals).forEach(t=>{Object.keys(grand).forEach(k=>{grand[k]+=(t[k]||0);});});
+  const grandHoursSet=new Set();
+  Object.values(hoursByDb).forEach(set=>set.forEach(k=>grandHoursSet.add(k)));
+  let grandHours=0;grandHoursSet.forEach(key=>{if(key.startsWith('__hist__'))grandHours+=parseInt(key.split('__')[2]||'0',10)||0;else grandHours+=1;});
+  const cell=(t,f)=>`<td style="text-align:center;padding:8px 10px;">${t[f]||0}</td>`;
+  const rowHtml=(db,t)=>{
+    const h=hoursForDb(db);
+    return`<tr><td style="font-weight:700;padding:8px 10px;">${esc(db)}</td>${TS_FIELD_ORDER.map(f=>cell(t,f)).join('')}<td style="text-align:center;padding:8px 10px;">${h||0}</td><td style="text-align:center;padding:8px 10px;">${rateAll(t,h)}</td><td style="text-align:center;padding:8px 10px;">${rateDV(t,h)}</td></tr>`;
+  };
+  const rows=Object.keys(weekTotals).length?Object.entries(weekTotals).map(([db,t])=>rowHtml(db,t)).join(''):`<tr><td colspan="12" style="padding:16px;text-align:center;color:var(--muted);font-style:italic;">No entries this week</td></tr>`;
+  const totalRow=Object.keys(weekTotals).length?`<tr style="background:var(--off);font-weight:800;"><td style="padding:10px;">TOTAL</td>${TS_FIELD_ORDER.map(f=>`<td style="text-align:center;padding:10px;">${grand[f]||0}</td>`).join('')}<td style="text-align:center;padding:10px;">${grandHours||0}</td><td style="text-align:center;padding:10px;">${rateAll(grand,grandHours)}</td><td style="text-align:center;padding:10px;">${rateDV(grand,grandHours)}</td></tr>`:'';
   container.innerHTML=`
     <div style="background:#fff;border-radius:8px;overflow:hidden;">
       <div style="padding:12px 16px;background:var(--navy);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Week Summary — ${esc(bsFormatNice(_bsWeekEnding))}</div>
       <table class="act-table" style="width:100%;">
-        <thead><tr><th>Database</th>${BS_COUNT_FIELDS.map(f=>`<th style="text-align:center;">${BS_COUNT_LABELS[f]}</th>`).join('')}</tr></thead>
+        <thead><tr><th>Database</th>${TS_FIELD_ORDER.map(f=>`<th style="text-align:center;">${TS_LABEL(f)}</th>`).join('')}<th style="text-align:center;">Hours</th><th style="text-align:center;">Rate (All)</th><th style="text-align:center;">Rate (D+V)</th></tr></thead>
         <tbody>${rows}${totalRow}</tbody>
       </table>
     </div>`;
@@ -5732,20 +5795,33 @@ function bsReadRowCounts(tr){
 }
 
 function bsRecalcDailySummary(dateStr,liveRow){
+  const TS_FIELD_ORDER=['desk','called','validated','new_co','vm_nr','refused','callback','gone'];
   // Compute per-database totals for the given day, using stored entries plus
   // the live (unsaved) row values so the summary stays in sync instantly.
   const dayTotals={};
   _bsEntries.filter(e=>e.entry_date===dateStr&&e.database_name).forEach(e=>{
-    // Skip the entry that corresponds to the live row — we'll use the live values instead
-    if(liveRow&&e.hour_slot===liveRow.hour&&e.database_name===liveRow.dbName)return;
-    if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-    BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});
+    // Skip the entries that correspond to the live row — we'll use the live values instead
+    if(liveRow&&e.hour_slot===liveRow.hour){
+      if(e.database_name===liveRow.dbName)return; // live regular entry replaces stored
+      if(e.database_name===BS_NEW_CO)return;       // live new_co replaces stored
+    }
+    if(!dayTotals[e.database_name])dayTotals[e.database_name]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+    if(e.database_name===BS_NEW_CO){dayTotals[e.database_name].new_co+=(e.validated||0);}
+    else{BS_COUNT_FIELDS.forEach(f=>{dayTotals[e.database_name][f]+=(e[f]||0);});}
   });
-  if(liveRow&&liveRow.dbName){
-    if(!dayTotals[liveRow.dbName])dayTotals[liveRow.dbName]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
-    BS_COUNT_FIELDS.forEach(f=>{dayTotals[liveRow.dbName][f]+=(liveRow.counts[f]||0);});
+  if(liveRow){
+    if(liveRow.dbName){
+      if(!dayTotals[liveRow.dbName])dayTotals[liveRow.dbName]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+      BS_COUNT_FIELDS.forEach(f=>{dayTotals[liveRow.dbName][f]+=(liveRow.counts[f]||0);});
+    }
+    if(liveRow.newCo){
+      if(!dayTotals[BS_NEW_CO])dayTotals[BS_NEW_CO]={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,new_co:0};
+      dayTotals[BS_NEW_CO].new_co+=liveRow.newCo;
+    }
   }
-  const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${BS_COUNT_FIELDS.map(f=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
+  const cell=(t,f)=>`<td style="text-align:center;padding:6px 8px;">${t[f]||0}</td>`;
+  const rowHtml=(db,t)=>`<tr><td style="font-weight:700;padding:6px 8px;">${esc(db)}</td>${TS_FIELD_ORDER.map(f=>cell(t,f)).join('')}</tr>`;
+  const summaryRows=Object.keys(dayTotals).length?Object.entries(dayTotals).map(([db,t])=>rowHtml(db,t)).join(''):`<tr><td colspan="9" style="padding:12px;text-align:center;color:var(--muted);font-style:italic;">No entries yet today</td></tr>`;
   const container=gel('bsDayContent');
   const tbody=container&&container.querySelectorAll('tbody')[1];
   if(tbody)tbody.innerHTML=summaryRows;
@@ -5760,21 +5836,32 @@ function bsRowChanged(dateStr,weekEndStr,hour,tr){
   // Live-update the read-only Called field
   const calledInp=tr.querySelector('[data-field="called"]');
   if(calledInp)calledInp.value=counts.called||'';
+  const ncInp=tr.querySelector('[data-field="new_co"]');
+  const newCo=ncInp?(parseInt(ncInp.value||'0',10)||0):0;
   const notes=(tr.querySelector('[data-field="notes"]').value||'').trim();
   // Live daily summary update (includes the unsaved row)
-  bsRecalcDailySummary(dateStr,{hour,dbName,counts});
-  // Skip saving if completely empty or no database chosen
-  const isEmpty=!dbName&&BS_COUNT_FIELDS.every(f=>!counts[f])&&!notes;
+  bsRecalcDailySummary(dateStr,{hour,dbName,counts,newCo});
+  // Decide what's worth saving
+  const regHasContent=dbName&&(BS_COUNT_FIELDS.some(f=>counts[f])||notes);
   const timerKey=dateStr+'__'+hour;
   if(_bsSaveTimers[timerKey])clearTimeout(_bsSaveTimers[timerKey]);
-  if(isEmpty||!dbName)return;
+  if(!regHasContent&&!newCo)return;
   _bsSaveTimers[timerKey]=setTimeout(async()=>{
-    const payload={user_email:currentUser.email,user_name:getUserDisplayName(),entry_date:dateStr,week_ending:weekEndStr,hour_slot:hour,database_name:dbName,...counts,notes:notes||null,updated_at:new Date().toISOString()};
-    const{error}=await sb.from('birdseye_entries').upsert(payload,{onConflict:'user_email,entry_date,hour_slot,database_name'});
-    if(error){console.error('Birdseye save error:',error);showToast('Save failed: '+error.message,'error');return;}
-    const idx=_bsEntries.findIndex(e=>e.entry_date===dateStr&&e.hour_slot===hour&&e.database_name===dbName);
-    if(idx>=0)Object.assign(_bsEntries[idx],payload);
-    else _bsEntries.push(payload);
+    const base={user_email:currentUser.email,user_name:getUserDisplayName(),entry_date:dateStr,week_ending:weekEndStr,hour_slot:hour,updated_at:new Date().toISOString()};
+    const writes=[];
+    if(regHasContent){
+      writes.push({...base,database_name:dbName,...counts,notes:notes||null});
+    }
+    if(newCo>0){
+      writes.push({...base,database_name:BS_NEW_CO,desk:0,called:0,validated:newCo,vm_nr:0,refused:0,callback:0,gone:0,notes:null});
+    }
+    for(const payload of writes){
+      const{error}=await sb.from('birdseye_entries').upsert(payload,{onConflict:'user_email,entry_date,hour_slot,database_name'});
+      if(error){console.error('Birdseye save error:',error);showToast('Save failed: '+error.message,'error');return;}
+      const idx=_bsEntries.findIndex(e=>e.entry_date===dateStr&&e.hour_slot===hour&&e.database_name===payload.database_name);
+      if(idx>=0)Object.assign(_bsEntries[idx],payload);
+      else _bsEntries.push(payload);
+    }
     // Re-run summary against stored values only (live row now saved)
     bsRecalcDailySummary(dateStr,null);
   },500);
