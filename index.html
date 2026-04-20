@@ -1954,7 +1954,9 @@ function _verfileActiveStatus(){
   return cbActive?'Callback':'Ready';
 }
 function toggleVerfileRowSelect(recId,checked){
+  console.log('[Verfile] row toggle',{recId,checked,activeTab:_verfileActiveStatus(),beforeSize:_verfileSelected.size});
   if(checked)_verfileSelected.add(recId);else _verfileSelected.delete(recId);
+  console.log('[Verfile] afterSize=',_verfileSelected.size);
   updateVerfileRemoveBtn();
   const master=gel('verfileSelectAll');
   if(master){
@@ -1985,8 +1987,11 @@ function updateVerfileRemoveBtn(){
   const label='🗑 Remove Selected ('+count+')';
   ['removeVerfileBtn','removeVerfileCbBtn'].forEach(id=>{
     const btn=gel(id);
+    console.log('[Verfile] updateRemoveBtn',id,'found=',!!btn,'count=',count);
     if(!btn)return;
-    btn.style.display=count>0?'':'none';
+    // Use an explicit display value — setting to '' can leave the original
+    // inline "display:none" in place on some browsers / style-attribute setters.
+    btn.style.display=count>0?'inline-block':'none';
     btn.textContent=label;
   });
 }
@@ -2020,6 +2025,7 @@ function renderCB(){
     return _cbSortAsc?ta.localeCompare(tb):tb.localeCompare(ta);
   });
   renderTable(gel('cbHead'),gel('cbBody'),rows,q,true,hasPermission('can_check_verfile'));
+  updateVerfileRemoveBtn();
 }
 
 function toggleCbSort(){_cbSortAsc=!_cbSortAsc;renderCB();}
