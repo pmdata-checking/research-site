@@ -5620,77 +5620,7 @@ async function csLoadReport(connectId){
     let json;try{json=JSON.parse(raw);}catch(e){throw new Error('Invalid response');}
     if(!res.ok)throw new Error(json.error||'Unable to load report — please try again');
     gel('csReportLoading').style.display='none';
-
-    // ────────────── CREDITSAFE DEBUG LOGGING ──────────────
-    console.groupCollapsed('🔍 CreditSafe RAW response envelope');
-    console.log('raw text (first 2000 chars):',(raw||'').slice(0,2000));
-    console.log('parsed json envelope:',json);
-    console.log('envelope top-level keys:',json?Object.keys(json):'(no json)');
-    console.log('json.report =',json?.report);
-    console.log('json.report?.report =',json?.report?.report); // detect double-wrap
-    console.log('json.data =',json?.data);
-    console.groupEnd();
-
-    // Pick the best "report" object — handles single-wrap, double-wrap, and no-wrap cases
-    let rpt=json?.report;
-    if(rpt&&typeof rpt==='object'&&rpt.report&&typeof rpt.report==='object'&&!Array.isArray(rpt.report)){
-      // Double-wrapped: edge function re-wrapped an already-wrapped CreditSafe response
-      rpt=rpt.report;
-    }
-    if(!rpt||typeof rpt!=='object'||!Object.keys(rpt).length){
-      // Fall back to the envelope itself if report is missing/empty
-      rpt=json||{};
-    }
-
-    console.log('🔍 Full report object (serialized):',JSON.stringify(rpt));
-    try{
-      console.groupCollapsed('🔍 CreditSafe resolved report structure');
-      console.log('Top-level keys:',Object.keys(rpt));
-      const ci=rpt.contactInformation||{};
-      const ai=rpt.additionalInformation||{};
-      const ei=ai.employeesInformation||ai.employees||{};
-      const bi=rpt.companyIdentification?.basicInformation||{};
-      const cs=rpt.companySummary||{};
-      console.log('contactInformation keys:',Object.keys(ci));
-      console.log('additionalInformation keys:',Object.keys(ai));
-      console.log('companyIdentification.basicInformation keys:',Object.keys(bi));
-      console.log('companySummary keys:',Object.keys(cs));
-
-      console.groupCollapsed('👥 Employees — paths checked');
-      console.log('additionalInformation.employeesInformation.numberOfEmployees =',ei.numberOfEmployees);
-      console.log('additionalInformation.employeesInformation.employees =',ei.employees);
-      console.log('additionalInformation.employeesInformation.count =',ei.count);
-      console.log('additionalInformation.employeesInformation (full) =',ai.employeesInformation);
-      console.log('additionalInformation.employees (full) =',ai.employees);
-      console.log('companyIdentification.basicInformation.numberOfEmployees =',bi.numberOfEmployees);
-      console.log('companySummary.numberOfEmployees =',cs.numberOfEmployees);
-      console.log('additionalInformation.numberOfEmployees =',ai.numberOfEmployees);
-      console.groupEnd();
-
-      console.groupCollapsed('📞 Phone — paths checked');
-      console.log('contactInformation.mainTelephoneNumber =',ci.mainTelephoneNumber);
-      console.log('contactInformation.telephone =',ci.telephone);
-      console.log('contactInformation.phoneNumber =',ci.phoneNumber);
-      console.log('contactInformation.telephoneNumbers =',ci.telephoneNumbers);
-      console.log('contactInformation.phoneNumbers =',ci.phoneNumbers);
-      console.log('contactInformation (full) =',ci);
-      console.groupEnd();
-
-      console.groupCollapsed('✉️ Email — paths checked');
-      console.log('contactInformation.emailAddresses =',ci.emailAddresses);
-      console.log('contactInformation.emailAddress =',ci.emailAddress);
-      console.log('contactInformation.email =',ci.email);
-      console.log('contactInformation.emails =',ci.emails);
-      console.groupEnd();
-
-      console.groupCollapsed('🌐 Website — paths checked');
-      console.log('contactInformation.websites =',ci.websites);
-      console.log('contactInformation.website =',ci.website);
-      console.groupEnd();
-
-      console.groupEnd();
-    }catch(debugErr){console.warn('CreditSafe debug logging error:',debugErr);}
-    // ────────────── END DEBUG LOGGING ──────────────
+    const rpt=json.report||json||{};
 
     const co=rpt.companySummary||rpt.companyIdentification||{};
     const name=co.businessName||co.companyName||rpt.companyName||'';
@@ -5759,11 +5689,10 @@ async function csLoadReport(connectId){
     gel('csReportContent').innerHTML=`
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
-        const ai=rpt.additionalInformation||{};
-        const ei=ai.employeesInformation||ai.employees||{};
-        const bi=rpt.companyIdentification?.basicInformation||{};
-        const emp=ei.numberOfEmployees||ei.employees||ei.count||bi.numberOfEmployees||rpt.companySummary?.numberOfEmployees||ai.numberOfEmployees||'';
-        const empStr=emp?String(emp):'';
+        const emp=rpt.additionalInformation?.employeesInformation?.numberOfEmployees
+                ??rpt.companySummary?.numberOfEmployees
+                ??'';
+        const empStr=(emp||emp===0)?String(emp):'';
         return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
           <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Company Info</div>
           <div style="display:flex;align-items:center;"><span style="font-size:18px;font-weight:800;color:var(--navy);">${esc(name)}</span>${cpBtn(['Company','COMPANY'],name,'Company')}</div>
@@ -5786,12 +5715,21 @@ async function csLoadReport(connectId){
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
         const ci=rpt.contactInformation||{};
-        const csPhone=(ci.mainTelephoneNumber||ci.telephone||ci.phoneNumber||'').trim();
-        const csWebsite=(ci.websites?ci.websites[0]:(ci.website||'')).trim();
+        // Phone: primary on mainAddress, fallback to any otherAddresses entry with a telephone
+        let csPhone=(ci.mainAddress&&ci.mainAddress.telephone)?String(ci.mainAddress.telephone).trim():'';
+        if(!csPhone&&Array.isArray(ci.otherAddresses)){
+          for(const a of ci.otherAddresses){
+            if(a&&a.telephone){csPhone=String(a.telephone).trim();break;}
+          }
+        }
+        // Website: array of strings on ci.websites
+        let csWebsite='';
+        if(Array.isArray(ci.websites)&&ci.websites.length)csWebsite=String(ci.websites[0]||'').trim();
+        // Emails: array on ci.emailAddresses (strings or objects). Missing for many companies.
         let emailList=[];
-        if(Array.isArray(ci.emailAddresses))emailList=ci.emailAddresses.map(e=>typeof e==='string'?e:(e.email||e.address||e.emailAddress||'')).filter(Boolean);
-        else if(ci.emailAddress)emailList=[ci.emailAddress];
-        else if(ci.email)emailList=[ci.email];
+        if(Array.isArray(ci.emailAddresses)){
+          emailList=ci.emailAddresses.map(e=>typeof e==='string'?e:(e.email||e.address||e.emailAddress||'')).filter(Boolean);
+        }
         emailList=emailList.map(e=>String(e).trim()).filter(Boolean);
         const row=(icon,value,fields,copyLabel)=>`<div style="display:flex;align-items:center;font-size:13px;margin-bottom:4px;">${value?`<span>${icon} ${esc(value)}</span>${cpBtn(fields,value,copyLabel)}`:`<span>${icon} <span style="${naStyle}">Not available</span></span>`}</div>`;
         let emailRows='';
