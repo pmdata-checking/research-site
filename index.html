@@ -5621,6 +5621,60 @@ async function csLoadReport(connectId){
     if(!res.ok)throw new Error(json.error||'Unable to load report — please try again');
     gel('csReportLoading').style.display='none';
     const rpt=json.report||{};
+
+    // ────────────── CREDITSAFE DEBUG LOGGING ──────────────
+    // Temporary: dump the full report JSON and the exact paths we're currently checking
+    // for Employees / Email / Phone so we can reconcile with what the API actually returns.
+    try{
+      console.groupCollapsed('🔍 CreditSafe report raw response');
+      console.log('Full report JSON:',rpt);
+      console.log('Top-level keys:',Object.keys(rpt));
+      const ci=rpt.contactInformation||{};
+      const ai=rpt.additionalInformation||{};
+      const ei=ai.employeesInformation||ai.employees||{};
+      const bi=rpt.companyIdentification?.basicInformation||{};
+      const cs=rpt.companySummary||{};
+      console.log('contactInformation keys:',Object.keys(ci));
+      console.log('additionalInformation keys:',Object.keys(ai));
+      console.log('companyIdentification.basicInformation keys:',Object.keys(bi));
+      console.log('companySummary keys:',Object.keys(cs));
+
+      console.groupCollapsed('👥 Employees — paths checked');
+      console.log('additionalInformation.employeesInformation.numberOfEmployees =',ei.numberOfEmployees);
+      console.log('additionalInformation.employeesInformation.employees =',ei.employees);
+      console.log('additionalInformation.employeesInformation.count =',ei.count);
+      console.log('additionalInformation.employeesInformation (full) =',ai.employeesInformation);
+      console.log('additionalInformation.employees (full) =',ai.employees);
+      console.log('companyIdentification.basicInformation.numberOfEmployees =',bi.numberOfEmployees);
+      console.log('companySummary.numberOfEmployees =',cs.numberOfEmployees);
+      console.log('additionalInformation.numberOfEmployees =',ai.numberOfEmployees);
+      console.groupEnd();
+
+      console.groupCollapsed('📞 Phone — paths checked');
+      console.log('contactInformation.mainTelephoneNumber =',ci.mainTelephoneNumber);
+      console.log('contactInformation.telephone =',ci.telephone);
+      console.log('contactInformation.phoneNumber =',ci.phoneNumber);
+      console.log('contactInformation.telephoneNumbers =',ci.telephoneNumbers);
+      console.log('contactInformation.phoneNumbers =',ci.phoneNumbers);
+      console.log('contactInformation (full) =',ci);
+      console.groupEnd();
+
+      console.groupCollapsed('✉️ Email — paths checked');
+      console.log('contactInformation.emailAddresses =',ci.emailAddresses);
+      console.log('contactInformation.emailAddress =',ci.emailAddress);
+      console.log('contactInformation.email =',ci.email);
+      console.log('contactInformation.emails =',ci.emails);
+      console.groupEnd();
+
+      console.groupCollapsed('🌐 Website — paths checked');
+      console.log('contactInformation.websites =',ci.websites);
+      console.log('contactInformation.website =',ci.website);
+      console.groupEnd();
+
+      console.groupEnd();
+    }catch(debugErr){console.warn('CreditSafe debug logging error:',debugErr);}
+    // ────────────── END DEBUG LOGGING ──────────────
+
     const co=rpt.companySummary||rpt.companyIdentification||{};
     const name=co.businessName||co.companyName||rpt.companyName||'';
     const regNo=co.companyRegistrationNumber||co.companyNumber||'';
