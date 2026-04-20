@@ -4978,15 +4978,12 @@ async function bsExportYtd(){
     const isGeorgia=/georgia/i.test(u.name);
     // Researcher name row
     const nameRow=[u.name];
-    if(isGeorgia){while(nameRow.length<11)nameRow.push('');nameRow.push('DATABASE PROGRESS — Data from Checking site coming soon');}
-    else{while(nameRow.length<headers.length)nameRow.push('');}
+    while(nameRow.length<headers.length)nameRow.push('');
     const nameRowIdx=aoa.length;
     aoa.push(nameRow);
     merges.push({s:{r:nameRowIdx,c:0},e:{r:nameRowIdx,c:headers.length-1}});
     // Header row
-    const headerRow=[...headers];
-    if(isGeorgia){while(headerRow.length<11)headerRow.push('');headerRow.push('Database','Checked','New Added');}
-    aoa.push(headerRow);
+    aoa.push([...headers]);
     // Per-database rows
     const totals=bsAggregateByDatabase(u.entries);
     const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
@@ -4994,18 +4991,14 @@ async function bsExportYtd(){
     u.entries.forEach(e=>{hoursAll.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
     BS_DATABASES.forEach(db=>{
       const t=totals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
-      const row=[db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate];
-      if(isGeorgia){while(row.length<11)row.push('');row.push(db,'','');}
-      aoa.push(row);
+      aoa.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
     });
     // Total row
     const gHours=hoursAll.size;
     const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
-    const totalRow=['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate];
-    if(isGeorgia){while(totalRow.length<11)totalRow.push('');totalRow.push('TOTAL','','');}
-    aoa.push(totalRow);
+    aoa.push(['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate]);
     aoa.push([]);
-    // Inject Verfile section directly after Georgia's block
+    // Inject Verfile section directly below Georgia's block
     if(isGeorgia){
       const{rows:vRows,localMerges:vMerges}=buildVerfileSection();
       const base=aoa.length;
@@ -5040,7 +5033,7 @@ async function bsExportYtd(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges']=merges;
-  ws['!cols']=[{wch:22},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:14},{wch:14},{wch:8},{wch:8},{wch:2},{wch:18},{wch:12},{wch:12}];
+  ws['!cols']=[{wch:22},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:14},{wch:14},{wch:8},{wch:8}];
   XLSX.utils.book_append_sheet(wb,ws,'YTD '+year);
   const fname='Birdseye_YTD_'+todayStr+'.xlsx';
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
