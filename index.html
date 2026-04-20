@@ -5336,7 +5336,7 @@ async function bsRenderDashboard(){
 
 // ─── Database Progress (Verfile stats) ─────────────────────────────
 const DB_PROGRESS_URL='https://checking.prospectmanager.co.uk/checking/api/verfile-stats/';
-const DB_PROGRESS_LABELS={wdc:'WDC'};
+const DB_PROGRESS_LABELS={wdc:'WDC',sealed_units:'Sealed Units'};
 let _dbProgress=null;      // {data, fetchedAt} on success
 let _dbProgressError=null; // string on failure
 let _dbProgressLoading=false;
@@ -5364,19 +5364,28 @@ function bsRenderDbProgressBody(){
   if(!_dbProgress){
     return'<div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic;">Click "Refresh Verfile Data" to load current database progress.</div>';
   }
+  const naCell='<td style="text-align:center;padding:8px 10px;color:#999;font-style:italic;">—</td>';
   const dbs=Object.keys(_dbProgress.data).filter(k=>k!=='last_updated');
   const rows=dbs.map(k=>{
-    const d=_dbProgress.data[k]||{};
+    const d=_dbProgress.data[k];
     const label=DB_PROGRESS_LABELS[k]||k.toUpperCase();
+    // If the endpoint returned null (e.g. sealed_units verfile missing), render a placeholder row
+    if(d===null||d===undefined){
+      return`<tr>
+        <td style="font-weight:700;padding:8px 10px;">${esc(label)}</td>
+        <td colspan="7" style="padding:8px 10px;color:#999;font-style:italic;">Verfile not available</td>
+      </tr>`;
+    }
+    const hasTiers=d.tier1_oldest!==undefined||d.tier2_oldest!==undefined||d.tier3_oldest!==undefined||d.percent_complete!==undefined;
     return`<tr>
       <td style="font-weight:700;padding:8px 10px;">${esc(label)}</td>
       <td style="text-align:right;padding:8px 10px;">${bsFmtNum(d.total_records)}</td>
       <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.oldest_date)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier1_oldest)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier2_oldest)}</td>
-      <td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier3_oldest)}</td>
+      ${hasTiers?`<td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier1_oldest)}</td>`:naCell}
+      ${hasTiers?`<td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier2_oldest)}</td>`:naCell}
+      ${hasTiers?`<td style="text-align:center;padding:8px 10px;">${bsFmtVfDate(d.tier3_oldest)}</td>`:naCell}
       <td style="text-align:right;padding:8px 10px;">${bsFmtNum(d.records_left)}</td>
-      <td style="text-align:right;padding:8px 10px;font-weight:700;">${bsFmtPct(d.percent_complete)}</td>
+      ${hasTiers?`<td style="text-align:right;padding:8px 10px;font-weight:700;">${bsFmtPct(d.percent_complete)}</td>`:naCell}
     </tr>`;
   }).join('');
   return`<table class="act-table" style="width:100%;">
