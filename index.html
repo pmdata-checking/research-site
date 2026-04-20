@@ -515,8 +515,11 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
       <div class="dash-toolbar">
         <button class="db-btn" onclick="goToDashboard()" style="background:rgba(255,255,255,.15);margin-right:8px;">← Back</button>
         <span class="dash-title">🦅 Birdseye</span>
-        <button class="db-btn" id="bsViewToggle" onclick="bsToggleView()" style="display:none;background:rgba(255,255,255,.15);">📊 Dashboard</button>
+        <button class="db-btn" id="bsViewTimesheet" onclick="bsShowView('timesheet')" style="display:none;background:rgba(255,255,255,.15);">📝 Timesheet</button>
+        <button class="db-btn" id="bsViewDashboard" onclick="bsShowView('dashboard')" style="display:none;background:rgba(255,255,255,.15);">📊 Dashboard</button>
+        <button class="db-btn" id="bsViewYtd" onclick="bsShowView('ytd')" style="display:none;background:rgba(255,255,255,.15);">📅 YTD</button>
         <button class="db-btn" id="bsExportBtn" onclick="bsExportWeek()" style="display:none;background:rgba(255,255,255,.15);">↓ Export Week</button>
+        <button class="db-btn" id="bsExportYtdBtn" onclick="bsExportYtd()" style="display:none;background:rgba(255,255,255,.15);">↓ Export YTD</button>
       </div>
       <div class="dash-scroll">
         <div id="bsTimesheet" style="max-width:1400px;margin:0 auto;">
@@ -538,6 +541,12 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
             <button class="db-btn" onclick="bsNextWeek()" style="background:rgba(255,255,255,.15);">Next Week →</button>
           </div>
           <div id="bsDashContent"></div>
+        </div>
+        <div id="bsYtd" style="max-width:1400px;margin:0 auto;display:none;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--navy);padding:14px 18px;border-radius:8px;color:#fff;">
+            <div style="flex:1;text-align:center;"><div id="bsYtdLabel" style="font-family:var(--font);font-size:16px;font-weight:800;color:#fff;"></div></div>
+          </div>
+          <div id="bsYtdContent"></div>
         </div>
       </div>
     </div>
@@ -4366,20 +4375,20 @@ function bsDayDates(weekEnding){
   return{fri,mon,tue,wed,thu};
 }
 
+let _bsCurrentView='timesheet'; // 'timesheet' | 'dashboard' | 'ytd'
+
 async function goToBirdseye(){
   if(currentIdx>=0)await releaseLock(currentIdx);
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
   gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
   showScreen('birdseye');
-  // Show dashboard toggle + export for superusers / permitted users
+  // Show superuser/permitted toolbar buttons
   const canView=isSuperuser||hasPermission('can_view_birdseye');
-  const vt=gel('bsViewToggle');if(vt)vt.style.display=canView?'':'none';
+  const vtTs=gel('bsViewTimesheet');if(vtTs)vtTs.style.display=canView?'':'none';
+  const vtDb=gel('bsViewDashboard');if(vtDb)vtDb.style.display=canView?'':'none';
+  const vtYt=gel('bsViewYtd');if(vtYt)vtYt.style.display=canView?'':'none';
   const xb=gel('bsExportBtn');if(xb)xb.style.display=canView?'':'none';
-  // Superusers default to Dashboard view; researchers default to Timesheet
-  const startDashboard=isSuperuser;
-  gel('bsTimesheet').style.display=startDashboard?'none':'';
-  gel('bsDashboard').style.display=startDashboard?'':'none';
-  gel('bsViewToggle').textContent=startDashboard?'📝 Timesheet':'📊 Dashboard';
+  const xyt=gel('bsExportYtdBtn');if(xyt)xyt.style.display=canView?'':'none';
   // Default week ending = next Friday
   _bsWeekEnding=bsFridayFor(new Date());
   // Default day = today's day if it falls in the week, else Friday
@@ -4387,23 +4396,33 @@ async function goToBirdseye(){
   const dow=today.getDay();
   const dayMap={5:'fri',1:'mon',2:'tue',3:'wed',4:'thu'};
   _bsSelectedDay=dayMap[dow]||'fri';
-  if(startDashboard)await bsRenderDashboard();
-  else await bsRenderWeek();
+  // Superusers default to Dashboard; researchers default to Timesheet
+  await bsShowView(isSuperuser?'dashboard':'timesheet');
 }
 
-async function bsToggleView(){
-  const ts=gel('bsTimesheet'),db=gel('bsDashboard');
-  const showingTs=ts.style.display!=='none';
-  ts.style.display=showingTs?'none':'';
-  db.style.display=showingTs?'':'none';
-  gel('bsViewToggle').textContent=showingTs?'📝 Timesheet':'📊 Dashboard';
-  if(showingTs)await bsRenderDashboard();
+async function bsShowView(view){
+  _bsCurrentView=view;
+  gel('bsTimesheet').style.display=view==='timesheet'?'':'none';
+  gel('bsDashboard').style.display=view==='dashboard'?'':'none';
+  gel('bsYtd').style.display=view==='ytd'?'':'none';
+  // Highlight the active toolbar button
+  [['bsViewTimesheet','timesheet'],['bsViewDashboard','dashboard'],['bsViewYtd','ytd']].forEach(([id,v])=>{
+    const b=gel(id);if(!b)return;
+    b.style.background=v===view?'var(--teal)':'rgba(255,255,255,.15)';
+  });
+  // Show/hide the matching export button
+  const xb=gel('bsExportBtn'),xyt=gel('bsExportYtdBtn');
+  const canView=isSuperuser||hasPermission('can_view_birdseye');
+  if(xb)xb.style.display=(canView&&view!=='ytd')?'':'none';
+  if(xyt)xyt.style.display=(canView&&view==='ytd')?'':'none';
+  if(view==='timesheet')await bsRenderWeek();
+  else if(view==='dashboard')await bsRenderDashboard();
+  else if(view==='ytd')await bsRenderYtd();
 }
-
-function bsDashboardVisible(){return gel('bsDashboard').style.display!=='none';}
 
 async function bsRefresh(){
-  if(bsDashboardVisible())await bsRenderDashboard();
+  if(_bsCurrentView==='dashboard')await bsRenderDashboard();
+  else if(_bsCurrentView==='ytd')await bsRenderYtd();
   else await bsRenderWeek();
 }
 
@@ -4788,6 +4807,123 @@ async function bsExportWeek(){
   ws['!cols']=[{wch:22},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},{wch:2},{wch:18},{wch:14},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws,'Week '+bsFormatDate(_bsWeekEnding));
   const fname='Birdseye_Week_ending_'+bsFormatDate(_bsWeekEnding).replace(/-/g,'')+'.xlsx';
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=fname;a.click();
+  showToast('Exported: '+fname,'done');
+}
+
+// ── YTD VIEW ───────────────────────────────────────────────
+async function bsFetchYtdAll(){
+  const year=new Date().getFullYear();
+  const startDate=year+'-01-01';
+  const todayStr=bsFormatDate(new Date());
+  const{data,error}=await sb.from('birdseye_entries').select('*').gte('entry_date',startDate).lte('entry_date',todayStr).order('user_name');
+  if(error){showToast('Failed to load YTD data: '+error.message,'error');return[];}
+  return data||[];
+}
+
+async function bsRenderYtd(){
+  const year=new Date().getFullYear();
+  gel('bsYtdLabel').textContent=year+' Year to Date — as of '+bsFormatNice(new Date());
+  const container=gel('bsYtdContent');
+  container.innerHTML='<div style="background:#fff;border-radius:8px;padding:30px;text-align:center;color:var(--muted);">Loading…</div>';
+  const allEntries=await bsFetchYtdAll();
+  // Group by user_email
+  const byUser={};
+  allEntries.forEach(e=>{
+    if(!byUser[e.user_email])byUser[e.user_email]={name:e.user_name,email:e.user_email,entries:[]};
+    byUser[e.user_email].entries.push(e);
+  });
+  const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!users.length){
+    container.innerHTML='<div style="background:#fff;border-radius:8px;padding:40px;text-align:center;color:var(--muted);font-size:13px;">No entries recorded year to date.</div>'+'<div style="height:16px;"></div>'+bsRenderDbProgressShell();
+    return;
+  }
+  const cards=users.map(u=>{
+    const totals=bsAggregateByDatabase(u.entries);
+    return bsRenderResearcherCard(u.name,totals,u.entries);
+  }).join('');
+  const teamTotals=bsAggregateByDatabase(allEntries);
+  const teamCard=bsRenderResearcherCard('TEAM TOTAL (YTD)',teamTotals,allEntries);
+  container.innerHTML=cards+'<div style="height:8px;"></div>'+teamCard+'<div style="height:16px;"></div>'+bsRenderDbProgressShell();
+}
+
+async function bsExportYtd(){
+  if(!(isSuperuser||hasPermission('can_view_birdseye'))){showToast('Permission required','error');return;}
+  const entries=await bsFetchYtdAll();
+  if(!entries.length){showToast('No YTD entries to export','info');return;}
+  const year=new Date().getFullYear();
+  const todayStr=bsFormatDate(new Date()).replace(/-/g,'');
+  // Group by user
+  const byUser={};
+  entries.forEach(e=>{
+    if(!byUser[e.user_email])byUser[e.user_email]={name:e.user_name,email:e.user_email,entries:[]};
+    byUser[e.user_email].entries.push(e);
+  });
+  const users=Object.values(byUser).sort((a,b)=>a.name.localeCompare(b.name));
+  const headers=['Database','Desk','Called','Validated','VM/NR','Refused','Callback','Gone','Hours','Rate'];
+  const aoa=[];
+  aoa.push([year+' BIRDSEYE YEAR TO DATE REPORT']);
+  aoa.push(['As of '+bsFormatNice(new Date())]);
+  aoa.push([]);
+  const merges=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}},{s:{r:1,c:0},e:{r:1,c:headers.length-1}}];
+
+  users.forEach(u=>{
+    const isGeorgia=/georgia/i.test(u.name);
+    // Researcher name row
+    const nameRow=[u.name];
+    if(isGeorgia){while(nameRow.length<11)nameRow.push('');nameRow.push('DATABASE PROGRESS — Data from Checking site coming soon');}
+    else{while(nameRow.length<headers.length)nameRow.push('');}
+    const nameRowIdx=aoa.length;
+    aoa.push(nameRow);
+    merges.push({s:{r:nameRowIdx,c:0},e:{r:nameRowIdx,c:headers.length-1}});
+    // Header row
+    const headerRow=[...headers];
+    if(isGeorgia){while(headerRow.length<11)headerRow.push('');headerRow.push('Database','Checked','New Added');}
+    aoa.push(headerRow);
+    // Per-database rows
+    const totals=bsAggregateByDatabase(u.entries);
+    const grand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+    const hoursAll=new Set();
+    u.entries.forEach(e=>{hoursAll.add(e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{grand[f]+=(e[f]||0);});});
+    BS_DATABASES.forEach(db=>{
+      const t=totals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
+      const row=[db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate];
+      if(isGeorgia){while(row.length<11)row.push('');row.push(db,'','');}
+      aoa.push(row);
+    });
+    // Total row
+    const gHours=hoursAll.size;
+    const gRate=gHours>0?(grand.validated/gHours).toFixed(2):'';
+    const totalRow=['TOTAL',grand.desk,grand.called,grand.validated,grand.vm_nr,grand.refused,grand.callback,grand.gone,gHours,gRate];
+    if(isGeorgia){while(totalRow.length<11)totalRow.push('');totalRow.push('TOTAL','','');}
+    aoa.push(totalRow);
+    aoa.push([]);
+  });
+
+  // Team total
+  const teamTotals=bsAggregateByDatabase(entries);
+  const teamGrand={desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0};
+  const teamHours=new Set();
+  entries.forEach(e=>{teamHours.add(e.user_email+'__'+e.entry_date+'__'+e.hour_slot);BS_COUNT_FIELDS.forEach(f=>{teamGrand[f]+=(e[f]||0);});});
+  aoa.push(['TEAM TOTAL (YTD)']);
+  merges.push({s:{r:aoa.length-1,c:0},e:{r:aoa.length-1,c:headers.length-1}});
+  aoa.push(headers);
+  BS_DATABASES.forEach(db=>{
+    const t=teamTotals[db]||{desk:0,called:0,validated:0,vm_nr:0,refused:0,callback:0,gone:0,hours:0,rate:''};
+    aoa.push([db,t.desk,t.called,t.validated,t.vm_nr,t.refused,t.callback,t.gone,t.hours,t.rate]);
+  });
+  const teamTotalRate=teamHours.size>0?(teamGrand.validated/teamHours.size).toFixed(2):'';
+  aoa.push(['TOTAL',teamGrand.desk,teamGrand.called,teamGrand.validated,teamGrand.vm_nr,teamGrand.refused,teamGrand.callback,teamGrand.gone,teamHours.size,teamTotalRate]);
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges']=merges;
+  ws['!cols']=[{wch:22},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:10},{wch:8},{wch:8},{wch:8},{wch:2},{wch:18},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'YTD '+year);
+  const fname='Birdseye_YTD_'+todayStr+'.xlsx';
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
