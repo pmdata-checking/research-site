@@ -462,6 +462,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         </div>
         <div class="edit-scroll" id="editScroll">
           <div class="edit-heading" id="editHeading">Record</div>
+          <div id="lastActionBanner" style="display:none;max-width:1400px;margin:0 auto 12px;padding:8px 14px;background:#fff4d1;border-left:4px solid var(--teal);border-radius:4px;font-family:var(--font);font-size:12px;font-weight:700;color:#5a4200;letter-spacing:.02em;"></div>
           <div id="editFormContent"></div>
         </div>
       </div>
@@ -1763,6 +1764,7 @@ async function openPreview(idx){
   gel('lockTimerBar').style.background='rgba(255,255,255,0.4)';
 
   gel('editHeading').textContent='Call Research Records'+(r.suref?' — '+r.suref:'')+(r.Company?' · '+r.Company:'');
+  updateLastActionBanner(r);
   buildForm(r,true); // always read-only in preview
 
   // Build preview action bar
@@ -1818,6 +1820,7 @@ async function openEdit(idx){
   if(locked){lb.classList.add('locked-other');gel('lockLabel').textContent='🔒 Locked by '+lockerName(r.id);gel('lockTimerBar').style.width='100%';}
   else{lb.classList.remove('locked-other');gel('lockLabel').textContent='EDIT: Locked for 10 minutes:';startLockTimer();}
   gel('editHeading').textContent='Call Research Records'+(r.suref?' — '+r.suref:'')+(r.Company?' · '+r.Company:'');
+  updateLastActionBanner(r);
   buildForm(r,locked);buildActionBar(r,locked);gel('editScroll').scrollTop=0;
   // Check if this callback has been researched 3+ times
   if(!locked)setTimeout(()=>checkTripleCallback(records[currentIdx]),400);
@@ -1845,6 +1848,15 @@ function getFieldVal(r,f){
   const key=Object.keys(r).find(k=>k.toLowerCase()===fl&&!['id','data','_status','project_id','original_order','created_at','updated_at','is_new_record'].includes(k));
   if(key&&r[key]!==undefined&&r[key]!==null&&r[key]!=='')return r[key];
   return '';
+}
+
+function updateLastActionBanner(r){
+  const el=gel('lastActionBanner');if(!el)return;
+  const ts=r&&r.id?_callbackTimestamps[r.id]:null;
+  if(!ts){el.style.display='none';el.textContent='';return;}
+  const dateStr=ts.slice(0,10).replace(/-/g,'');
+  el.textContent='Last actioned: '+dateStr;
+  el.style.display='';
 }
 
 function buildForm(r,locked){
@@ -2813,14 +2825,17 @@ async function doTagRec(status){
 
   if(status!=='Ready'){
     if(sourceTab==='Callback'){
-      // Find the callback with the oldest last-updated timestamp
+      // Pick the next callback using the same sort order as the Callbacks tab
+      // list: sorted by _callbackTimestamps ascending (oldest first), records
+      // without a timestamp float to the top.
       const cbPool=records.map((r,i)=>({r,i})).filter(({r,i})=>r._status==='Callback'&&i!==currentIdx&&r.project_id===currentProject.id);
       if(cbPool.length>0){
-        // Sort by Last_up/Date_val ascending — oldest first
         cbPool.sort((a,b)=>{
-          const aDate=getFieldVal(a.r,'Last_up')||getFieldVal(a.r,'Date_val')||getFieldVal(a.r,'Last up')||'99999999';
-          const bDate=getFieldVal(b.r,'Last_up')||getFieldVal(b.r,'Date_val')||getFieldVal(b.r,'Last up')||'99999999';
-          return aDate.localeCompare(bDate);
+          const ta=_callbackTimestamps[a.r.id],tb=_callbackTimestamps[b.r.id];
+          if(!ta&&!tb)return 0;
+          if(!ta)return -1;
+          if(!tb)return 1;
+          return _cbSortAsc?ta.localeCompare(tb):tb.localeCompare(ta);
         });
         openEdit(cbPool[0].i);
         return;
