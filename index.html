@@ -6474,13 +6474,17 @@ async function csLoadReport(connectId){
     const regNo=co.companyRegistrationNumber||co.companyNumber||'';
     const status=co.companyStatus?.status||co.companyStatus||co.status||'';
     const statusCls=(status||'').toLowerCase().includes('active')?'color:var(--done);':'color:var(--danger);';
-    // Address
-    const addr=rpt.contactInformation||co.mainAddress||co.address||{};
-    const addrParts=[addr.street||addr.simpleValue||'',addr.city||'',addr.province||addr.region||'',addr.postCode||addr.postalCode||'',addr.country||''].filter(Boolean);
+    // Address — registered address lives at contactInformation.mainAddress
+    // (or companyIdentification.basicInformation.contactAddress as a fallback).
+    const addr=rpt.contactInformation?.mainAddress
+              ||rpt.companyIdentification?.basicInformation?.contactAddress
+              ||co.mainAddress||co.address||{};
+    const streetCombined=[addr.houseNumber||'',addr.street||addr.simpleValue||''].filter(Boolean).join(' ').trim();
+    const addrParts=[streetCombined,addr.city||'',addr.province||addr.region||'',addr.postCode||addr.postalCode||'',addr.country||''].filter(Boolean);
     // Store parsed report for Copy to Record
     _csLastReport={name,regNo,status,addr,addrParts};
     // Address parts
-    const addrStreet=addr.street||addr.simpleValue||'';
+    const addrStreet=streetCombined;
     const addrCity=addr.city||'';
     const addrRegion=addr.province||addr.region||'';
     const addrPostcode=addr.postCode||addr.postalCode||'';
@@ -6534,8 +6538,11 @@ async function csLoadReport(connectId){
     gel('csReportContent').innerHTML=`
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
+        console.log('Employees raw:', JSON.stringify(rpt.additionalInformation));
         const emp=rpt.additionalInformation?.employeesInformation?.numberOfEmployees
+                ??rpt.additionalInformation?.employees
                 ??rpt.companySummary?.numberOfEmployees
+                ??rpt.companyIdentification?.basicInformation?.numberOfEmployees
                 ??'';
         const empStr=(emp||emp===0)?String(emp):'';
         return`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:14px;">
