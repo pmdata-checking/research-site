@@ -958,6 +958,18 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 </div>
 
 <!-- EMAIL COMPOSER MODAL -->
+<div class="modal-overlay" id="notesReviewModal">
+  <div class="modal" style="width:520px;">
+    <h3>Review Notes</h3>
+    <div class="modal-sub" style="margin-bottom:12px;">This record has notes — please check if anything needs to be moved or deleted before submitting.</div>
+    <textarea id="notesReviewBody" class="modal-input" readonly style="min-height:140px;resize:vertical;font-family:var(--body);font-size:13px;background:#f4f7fa;color:var(--text);white-space:pre-wrap;"></textarea>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="mbtn mbtn-danger" onclick="notesReviewAnswer('clear')">Clear Notes &amp; Submit</button>
+      <button class="mbtn mbtn-primary" onclick="notesReviewAnswer('keep')">Keep Notes &amp; Submit</button>
+      <button class="mbtn mbtn-cancel" onclick="notesReviewAnswer('cancel')">Go Back</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="emailSuggestModal">
   <div class="modal" style="width:440px;">
     <h3>Send an Email?</h3>
@@ -3074,6 +3086,15 @@ async function doTagRec(status){
       }
       return;
     }
+  }
+
+  // Public Notes review — if the record has non-empty Notes, let the
+  // researcher decide whether to keep, clear, or go back and edit them
+  // before the submission proceeds. Private Notes is not touched here.
+  if(status==='Done'||status==='Callback'){
+    const nAction=await maybeShowNotesReview(currentIdx);
+    if(nAction==='cancel')return;
+    if(nAction==='clear')clearPublicNotesOnRecord(records[currentIdx]);
   }
 
   // Sync all r.data fields to top level before saving
@@ -6159,6 +6180,54 @@ function getContactNameForEmail(r,field){
   // Map email field to contact number and return first name only
   const num=field.match(/_(\d)$/)?.[1]||'1'; // default to Contact 1 for Co_E-mail
   return(r['Firstn_'+num]||getFieldVal(r,'Firstn_'+num)||getFieldVal(r,'Firstn '+num)||'').trim();
+}
+
+let _notesReviewResolve=null;
+// Locate the public Notes projField (Notes / NOTES / note etc.) — explicitly
+// NOT Private_Notes. Returns null if the project has no public notes field.
+function findPublicNotesKey(){
+  return projFields.find(f=>{
+    const nk=String(f).toLowerCase().replace(/[_\s\-]/g,'');
+    return nk==='notes'||nk==='note';
+  })||null;
+}
+// Returns Promise<'clear'|'keep'|'cancel'|'skip'>. 'skip' means the prompt
+// wasn't needed (no Notes field on this project, or Notes is empty/whitespace).
+function maybeShowNotesReview(recordIdx){
+  if(recordIdx<0||!records[recordIdx])return Promise.resolve('skip');
+  const notesKey=findPublicNotesKey();
+  if(!notesKey)return Promise.resolve('skip');
+  const r=records[recordIdx];
+  const liveVal=r[notesKey]!==undefined&&r[notesKey]!==null?String(r[notesKey]):String(getFieldVal(r,notesKey)||'');
+  if(!liveVal.trim())return Promise.resolve('skip');
+  gel('notesReviewBody').value=liveVal;
+  openModal('notesReviewModal');
+  return new Promise(resolve=>{_notesReviewResolve=resolve;});
+}
+function notesReviewAnswer(action){
+  closeModal('notesReviewModal');
+  if(_notesReviewResolve){_notesReviewResolve(action);_notesReviewResolve=null;}
+}
+// Wipe public Notes on a record across all case/separator variants that
+// might be present in either r top-level or r.data, and clear the form
+// textarea so the UI reflects the change.
+function clearPublicNotesOnRecord(r){
+  const isNotesKey=k=>{
+    const nk=String(k).toLowerCase().replace(/[_\s\-]/g,'');
+    return nk==='notes'||nk==='note';
+  };
+  Object.keys(r).forEach(k=>{
+    if(k==='data'||SKIP.has(k))return;
+    if(isNotesKey(k))r[k]='';
+  });
+  if(r.data&&typeof r.data==='object'){
+    Object.keys(r.data).forEach(k=>{if(isNotesKey(k))r.data[k]='';});
+  }
+  const notesKey=findPublicNotesKey();
+  if(notesKey){
+    const el=document.querySelector('[data-field="'+notesKey+'"]');
+    if(el)el.value='';
+  }
 }
 
 let _emailSuggestResolve=null;
