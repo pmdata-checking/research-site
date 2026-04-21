@@ -1023,6 +1023,8 @@ const SB_URL='https://zmnofnsvonarpevzrkuo.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inptbm9mbnN2b25hcnBldnpya3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MTE5NzYsImV4cCI6MjA4ODk4Nzk3Nn0.1xvTgXFBDiyEFUtziIaZ0s7mByEu3wZsg29eStU13ao';
 
 const OFFICE_OPT=['H : Head Office','B : Branch','F : Factory','S : Showroom','W : Warehouse','O : Other'];
+// Builders Merchants (stockistbase) — shown only when currentProject.database_family === 'stockistbase'.
+const MERCHANT_TYPE_OPT=['Timber & Joinery Products','Heavy Building Materials','Decorating','Tools','Workwear & Safetywear','Ironmongery','Landscaping','Plumbing, Heating & Electrical','Renewables & Water Saving','Kitchens & Bathrooms','General','Services'];
 const EMP_OPT=['A : <10 Employees','B : 10–24 Employees','C : 25–49 Employees','D : 50–99 Employees','E : 100–249 Employees','F : 250+ Employees'];
 const ONSITE_OPT=["# : Don't know or refused",'Factory','Showroom','Sales Office','Warehouse','Workshop','Depot','Distribution Centre'];
 // Maps short codes to full option strings
@@ -2355,7 +2357,9 @@ function buildWBForm(cont,r,locked,fields){
   const empF=ff(['Co_Employees','SITE EMPLOYEES','SITEEMPLOYEES','EMPLOYEES','NO OF EMPLOYEES']);
   const onsiteF=ff(['Onsite_activity','OTHER CONTACTS','ONSITE','ONSITE ACTIVITY']);
   const callLevelF=ff(['CALL_LEVEL','Call Level','CALLLEVEL','Call_Level']);
-  const wdcCoSizeF=ff(['CO_SIZE']);const wdcSiteF=ff(['SITE']);const wdcInstallF=ff(['INSTALL']);const wdcMakeF=ff(['MAKE']);const wdcSupplyF=ff(['SUPPLY']);const isWDC=!!(wdcInstallF||wdcMakeF||wdcSupplyF||wdcCoSizeF);const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC);
+  const wdcCoSizeF=ff(['CO_SIZE']);const wdcSiteF=ff(['SITE']);const wdcInstallF=ff(['INSTALL']);const wdcMakeF=ff(['MAKE']);const wdcSupplyF=ff(['SUPPLY']);const isWDC=!!(wdcInstallF||wdcMakeF||wdcSupplyF||wdcCoSizeF);
+  const isStockist=currentProject?.database_family==='stockistbase';
+  const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist);
   const countryF=ff(['Country','COUNTRY']);
   if(leftF.length||midF.length||hasRight){
     const g=document.createElement('div');g.className='main-grid';
@@ -2385,6 +2389,7 @@ function buildWBForm(cont,r,locked,fields){
     const rc=document.createElement('div');
     if(regionF){const rw=document.createElement('div');rw.className='ef-field';rw.innerHTML='<div class="ef-label">Region</div>';const rsel=mkWDCCodeSel(regionF,WDC_REGION_OPT,WDC_REGION_LABELS,getFieldVal(r,regionF)||'',locked);rsel.id='wdc-region-sel';rw.appendChild(rsel);rc.appendChild(rw);}
     if(officeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Office:</div>`;w.appendChild(mkSel(officeF,OFFICE_OPT,resolveOption(r[officeF]||'',OFFICE_MAP,OFFICE_OPT),locked));rc.appendChild(w);}
+    if(isStockist){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Merchant Type:</div>';w.appendChild(mkSel('MERCHANT_TYPE',MERCHANT_TYPE_OPT,getFieldVal(r,'MERCHANT_TYPE')||'',locked));rc.appendChild(w);}
     if(callLevelF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Call Level:</div>';w.appendChild(mkWDCCodeSel(callLevelF,['S','R'],{'S':'S: Senior','R':'R: Reception'},getFieldVal(r,callLevelF)||'',locked));rc.appendChild(w);}
     if(empF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Employees:</div>`;w.appendChild(mkSel(empF,EMP_OPT,resolveOption(r[empF]||'',EMP_MAP,EMP_OPT),locked));rc.appendChild(w);}
     if(onsiteF){const rawOnsite=(r[onsiteF]||'').split(',').map(s=>s.trim()).filter(Boolean);const checked=rawOnsite.map(v=>ONSITE_OPT.find(o=>o===v||o.toLowerCase().includes(v.toLowerCase())||v.toLowerCase().includes(o.toLowerCase()))||v);const ow=document.createElement('div');ow.className='onsite-wrap';ow.innerHTML=`<div class="onsite-title">Other onsite activity:</div><div class="onsite-list">${ONSITE_OPT.map(o=>`<label class="onsite-item"><input type="checkbox" data-onsite="${o}" ${checked.includes(o)?'checked':''} ${dis}> ${o}</label>`).join('')}</div>`;rc.appendChild(ow);}
