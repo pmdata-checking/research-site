@@ -6537,10 +6537,6 @@ async function csLoadReport(connectId){
     gel('csReportContent').innerHTML=`
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
-        console.log('Report top-level keys:', Object.keys(rpt));
-        console.log('otherInformation:', JSON.stringify(rpt.otherInformation));
-        console.log('employeesInformation:', JSON.stringify(rpt.employeesInformation));
-        console.log('additionalInformation full:', JSON.stringify(rpt.additionalInformation));
         const fs0=rpt.financialStatements?.[0]||{};
         const lfs0=rpt.localFinancialStatements?.[0]||{};
         const emp=fs0.miscellaneous?.numberOfEmployees
@@ -6560,7 +6556,7 @@ async function csLoadReport(connectId){
           <div style="display:flex;align-items:center;"><span style="font-size:18px;font-weight:800;color:var(--navy);">${esc(name)}</span>${cpBtn(['Company','COMPANY'],name,'Company')}</div>
           <div style="display:flex;align-items:center;margin-top:4px;font-size:13px;color:var(--muted);">Registration: ${regNo?`<span style="margin-left:4px;">${esc(regNo)}</span>${cpBtn(['Company_Number','CO_NUMBER','Company Number'],regNo,'Reg')}`:`<span style="margin-left:4px;${naStyle}">Not available</span>`}</div>
           <div style="margin-top:4px;font-size:13px;">Status: ${status?`<span style="font-weight:700;${statusCls}">${esc(status)}</span>`:`<span style="${naStyle}">Not available</span>`}</div>
-          <div style="display:flex;align-items:center;margin-top:4px;font-size:13px;color:var(--muted);">Employees: ${empStr?`<span style="margin-left:4px;">${esc(empStr)}</span>${cpBtn(['Co_Employees','CO_EMPLOYEES','Co Employees','Co_Size','CO_SIZE'],empStr,'Employees')}`:`<span style="margin-left:4px;${naStyle}">Not available</span>`}</div>
+          <div style="display:flex;align-items:center;margin-top:4px;font-size:13px;color:var(--muted);">${empStr?`Employees: <span style="margin-left:4px;">${esc(empStr)}</span>${cpBtn(['Co_Employees','CO_EMPLOYEES','Co Employees','Co_Size','CO_SIZE'],empStr,'Employees')}`:`<span style="${naStyle}">Employees (not in standard report)</span>`}</div>
         </div>`;
       })()}
       ${(()=>{
