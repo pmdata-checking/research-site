@@ -3766,8 +3766,22 @@ async function exportList(type){
   const a=document.createElement('a');
   if(isXlsx){
     const {headers, rows}=buildExportAOA(data);
+    // Build cells explicitly as forced-string {t:'s'} entries rather than
+    // handing the AOA to aoa_to_sheet. aoa_to_sheet auto-detects cell types
+    // from JS values, which in at least one case was dropping data out of
+    // the Done export (e.g. COMPANY NUMBER, COUNTRY, CO_EMAIL rendering as
+    // blanks). Explicit string cells bypass that path.
+    const ws={};
+    const allRows=[headers, ...rows];
+    allRows.forEach((row,rIdx)=>{
+      for(let cIdx=0;cIdx<headers.length;cIdx++){
+        const raw=row[cIdx];
+        const val=raw==null?'':String(raw);
+        ws[XLSX.utils.encode_cell({r:rIdx,c:cIdx})]={t:'s',v:val};
+      }
+    });
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:allRows.length-1,c:headers.length-1}});
     const wb=XLSX.utils.book_new();
-    const ws=XLSX.utils.aoa_to_sheet([headers, ...rows]);
     XLSX.utils.book_append_sheet(wb,ws,'Done');
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
