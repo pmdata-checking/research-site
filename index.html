@@ -1026,6 +1026,8 @@ const OFFICE_OPT=['H : Head Office','B : Branch','F : Factory','S : Showroom','W
 // Builders Merchants (stockistbase) — shown only when currentProject.database_family === 'stockistbase'.
 const MERCHANT_TYPE_OPT=['Timber & Joinery Products','Heavy Building Materials','Decorating','Tools','Workwear & Safetywear','Ironmongery','Landscaping','Plumbing, Heating & Electrical','Renewables & Water Saving','Kitchens & Bathrooms','General','Services'];
 const BUYING_GROUP_OPT=['None','PHG','NBG','H&B','IBC','IPG','FORTIS','TBG'];
+const HEAVY_LIGHT_OPT=['Heavyside','Lightside'];
+const ASSOCIATION_OPT=['NMBS','BMF'];
 const EMP_OPT=['A : <10 Employees','B : 10–24 Employees','C : 25–49 Employees','D : 50–99 Employees','E : 100–249 Employees','F : 250+ Employees'];
 const ONSITE_OPT=["# : Don't know or refused",'Factory','Showroom','Sales Office','Warehouse','Workshop','Depot','Distribution Centre'];
 // Maps short codes to full option strings
@@ -2356,10 +2358,31 @@ function buildWBForm(cont,r,locked,fields){
   const regionF=ff(['region','REGION']);
   const officeF=ff(['Office','HEAD OFFICE','HEADOFFICE','OFFICE']);
   const empF=ff(['Co_Employees','SITE EMPLOYEES','SITEEMPLOYEES','EMPLOYEES','NO OF EMPLOYEES']);
-  const onsiteF=ff(['Onsite_activity','OTHER CONTACTS','ONSITE','ONSITE ACTIVITY']);
+  const isStockist=currentProject?.database_family==='stockistbase';
+  // On stockistbase we do NOT treat OTHER CONTACTS as the onsite-activity
+  // field — it's handled (and hidden) as its own BM-specific field below.
+  const onsiteF=isStockist
+    ?ff(['Onsite_activity','ONSITE','ONSITE ACTIVITY'])
+    :ff(['Onsite_activity','OTHER CONTACTS','ONSITE','ONSITE ACTIVITY']);
   const callLevelF=ff(['CALL_LEVEL','Call Level','CALLLEVEL','Call_Level']);
   const wdcCoSizeF=ff(['CO_SIZE']);const wdcSiteF=ff(['SITE']);const wdcInstallF=ff(['INSTALL']);const wdcMakeF=ff(['MAKE']);const wdcSupplyF=ff(['SUPPLY']);const isWDC=!!(wdcInstallF||wdcMakeF||wdcSupplyF||wdcCoSizeF);
-  const isStockist=currentProject?.database_family==='stockistbase';
+  // Stockistbase-specific fields — every lookup is case/separator-flexible
+  // via ff(), and every fallback data-field name used when writing new
+  // values is the canonical uppercase form, so old and new storage keys
+  // land in the same r.data slot after save+reload.
+  const branchTelF=isStockist?ff(['BRANCH_NO','Branch_No','BRANCH_NUMBER','Branch_Tel','BRANCHTEL','BRANCHNO']):null;
+  const branchTagF=isStockist?ff(['BRANCH_TAG','Branch_Tag','BRANCHTAG']):null;
+  const outletsF=isStockist?ff(['NO_OUTLETS','NUM_OUTLETS','OUTLETS','No_of_Outlets','NUMBER_OF_OUTLETS','No_Outlets']):null;
+  const scopeF=isStockist?ff(['SCOPE']):null;
+  const heavyLightF=isStockist?ff(['HEAVY_LIGHT','Heavy_Light','HEAVYLIGHT','HeavyLight','Heavy Light']):null;
+  const otherContactsF=isStockist?ff(['OTHER_CONTACTS','Other_Contacts','OTHERCONTACTS','OTHER CONTACTS']):null;
+  const otherServicesF=isStockist?ff(['OTHER_SERVICES','Other_Services','OTHERSERVICES']):null;
+  const associationF=isStockist?ff(['ASSOCIATION','Association']):null;
+  const oldMerchantTypeF=isStockist?ff(['MERCHANT_TYPE','Merchant_Type','MERCHANTTYPE','MerchantType']):null;
+  const oldBuyingGroupF=isStockist?ff(['BUYING_GROUP','Buying_Group','BUYINGGROUP','BuyingGroup']):null;
+  // Branch Tel sits in the mid column under Fax — push into midF so the
+  // existing loop renders it inline with the other mid-column fields.
+  if(branchTelF&&!midF.includes(branchTelF))midF.push(branchTelF);
   const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist);
   const countryF=ff(['Country','COUNTRY']);
   if(leftF.length||midF.length||hasRight){
@@ -2375,7 +2398,9 @@ function buildWBForm(cont,r,locked,fields){
     }else{w.innerHTML=`<div class="ef-label">${KNOWN[f]||f}</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;}lc.appendChild(w);});
     const mc=document.createElement('div');
     midF.forEach(f=>{const w=document.createElement('div');w.className='ef-field';const fup=f.toUpperCase();
-      if(fup==='ACCREDITATIONS'){
+      if(isStockist&&branchTelF&&f===branchTelF){
+        w.innerHTML=`<div class="ef-label">Branch Tel</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;
+      }else if(fup==='ACCREDITATIONS'){
         const stored=(getFieldVal(r,f)||'').split(/\s*,\s*/).filter(Boolean);
         w.innerHTML='<div class="ef-label">Accreditations</div>';
         const grp=document.createElement('div');grp.className='wdc-check-group';grp.dataset.multiField=f;
@@ -2387,36 +2412,83 @@ function buildWBForm(cont,r,locked,fields){
         w.appendChild(grp);
       }else{w.innerHTML=`<div class="ef-label">${KNOWN[f]||f}</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;}
       mc.appendChild(w);});
+    // Stockistbase — Buying Group + Association live in the mid column below
+    // Branch Tel, with a visual gap and no banner. Both use the existing
+    // [data-multi-field] plumbing so the generic saveMulti listener joins
+    // checked values with "/" on change.
+    if(isStockist){
+      const bgDataField=oldBuyingGroupF||'BUYING_GROUP';
+      const bgWrap=document.createElement('div');bgWrap.className='ef-field';bgWrap.style.marginTop='20px';
+      bgWrap.innerHTML='<div class="ef-label">Buying Group:</div>';
+      const bgStored=(getFieldVal(r,bgDataField)||'').split(/\s*\/\s*/).filter(Boolean);
+      const bgGrp=document.createElement('div');bgGrp.className='wdc-check-group';bgGrp.dataset.multiField=bgDataField;
+      BUYING_GROUP_OPT.forEach(opt=>{
+        const lbl=document.createElement('label');lbl.className='wdc-check-item';
+        const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=bgStored.includes(opt);if(locked)cb.disabled=true;
+        cb.addEventListener('change',()=>{
+          if(opt==='None'&&cb.checked){bgGrp.querySelectorAll('input[type="checkbox"]').forEach(other=>{if(other!==cb)other.checked=false;});}
+          else if(opt!=='None'&&cb.checked){const n=bgGrp.querySelector('input[type="checkbox"][value="None"]');if(n)n.checked=false;}
+        });
+        lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));bgGrp.appendChild(lbl);
+      });
+      bgWrap.appendChild(bgGrp);mc.appendChild(bgWrap);
+
+      const asDataField=associationF||'ASSOCIATION';
+      const asWrap=document.createElement('div');asWrap.className='ef-field';
+      asWrap.innerHTML='<div class="ef-label">Association:</div>';
+      const asStored=(getFieldVal(r,asDataField)||'').split(/\s*\/\s*/).filter(Boolean);
+      const asGrp=document.createElement('div');asGrp.className='wdc-check-group';asGrp.dataset.multiField=asDataField;
+      ASSOCIATION_OPT.forEach(opt=>{
+        const lbl=document.createElement('label');lbl.className='wdc-check-item';
+        const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=asStored.includes(opt);if(locked)cb.disabled=true;
+        lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));asGrp.appendChild(lbl);
+      });
+      asWrap.appendChild(asGrp);mc.appendChild(asWrap);
+    }
     const rc=document.createElement('div');
     if(regionF){const rw=document.createElement('div');rw.className='ef-field';rw.innerHTML='<div class="ef-label">Region</div>';const rsel=mkWDCCodeSel(regionF,WDC_REGION_OPT,WDC_REGION_LABELS,getFieldVal(r,regionF)||'',locked);rsel.id='wdc-region-sel';rw.appendChild(rsel);rc.appendChild(rw);}
     if(officeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Office:</div>`;w.appendChild(mkSel(officeF,OFFICE_OPT,resolveOption(r[officeF]||'',OFFICE_MAP,OFFICE_OPT),locked));rc.appendChild(w);}
-    if(isStockist){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Merchant Type:</div>';w.appendChild(mkSel('MERCHANT_TYPE',MERCHANT_TYPE_OPT,getFieldVal(r,'MERCHANT_TYPE')||'',locked));rc.appendChild(w);}
     if(isStockist){
-      const w=document.createElement('div');w.className='ef-field';
-      w.innerHTML='<div class="ef-label">Buying Group:</div>';
-      const stored=(getFieldVal(r,'BUYING_GROUP')||'').split(/\s*\/\s*/).filter(Boolean);
-      const grp=document.createElement('div');grp.className='wdc-check-group';grp.dataset.multiField='BUYING_GROUP';
-      BUYING_GROUP_OPT.forEach(opt=>{
+      // Merchant Type dropdown — writes to the existing projField if one was
+      // found (so old data merges into the same r.data slot), otherwise to
+      // the canonical MERCHANT_TYPE key.
+      const mtField=oldMerchantTypeF||'MERCHANT_TYPE';
+      const mtW=document.createElement('div');mtW.className='ef-field';
+      mtW.innerHTML='<div class="ef-label">Merchant Type:</div>';
+      mtW.appendChild(mkSel(mtField,MERCHANT_TYPE_OPT,getFieldVal(r,mtField)||'',locked));
+      rc.appendChild(mtW);
+      // Heavy/Light — two-option dropdown. Old free-text values that don't
+      // match Heavyside/Lightside will render as the empty option on load;
+      // saving picks the selected option and overwrites.
+      const hlField=heavyLightF||'HEAVY_LIGHT';
+      const hlW=document.createElement('div');hlW.className='ef-field';
+      hlW.innerHTML='<div class="ef-label">Heavy/Light:</div>';
+      hlW.appendChild(mkSel(hlField,HEAVY_LIGHT_OPT,getFieldVal(r,hlField)||'',locked));
+      rc.appendChild(hlW);
+      // Other Services — same 12 options as Merchant Type, multi-select.
+      const osField=otherServicesF||'OTHER_SERVICES';
+      const osWrap=document.createElement('div');osWrap.className='ef-field';
+      osWrap.innerHTML='<div class="ef-label">Other Services:</div>';
+      const osStored=(getFieldVal(r,osField)||'').split(/\s*\/\s*/).filter(Boolean);
+      const osGrp=document.createElement('div');osGrp.className='wdc-check-group';osGrp.dataset.multiField=osField;
+      MERCHANT_TYPE_OPT.forEach(opt=>{
         const lbl=document.createElement('label');lbl.className='wdc-check-item';
-        const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=stored.includes(opt);if(locked)cb.disabled=true;
-        // "None" is mutually exclusive with every other option. Programmatic
-        // .checked changes don't fire change events, so saveMulti (attached
-        // later by the generic [data-multi-field] listener) still sees the
-        // final state via the clicked checkbox's own change event.
-        cb.addEventListener('change',()=>{
-          if(opt==='None'&&cb.checked){
-            grp.querySelectorAll('input[type="checkbox"]').forEach(other=>{if(other!==cb)other.checked=false;});
-          } else if(opt!=='None'&&cb.checked){
-            const noneCb=grp.querySelector('input[type="checkbox"][value="None"]');
-            if(noneCb)noneCb.checked=false;
-          }
-        });
-        lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));grp.appendChild(lbl);
+        const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=osStored.includes(opt);if(locked)cb.disabled=true;
+        lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));osGrp.appendChild(lbl);
       });
-      w.appendChild(grp);rc.appendChild(w);
+      osWrap.appendChild(osGrp);rc.appendChild(osWrap);
     }
     if(callLevelF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Call Level:</div>';w.appendChild(mkWDCCodeSel(callLevelF,['S','R'],{'S':'S: Senior','R':'R: Reception'},getFieldVal(r,callLevelF)||'',locked));rc.appendChild(w);}
     if(empF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Employees:</div>`;w.appendChild(mkSel(empF,EMP_OPT,resolveOption(r[empF]||'',EMP_MAP,EMP_OPT),locked));rc.appendChild(w);}
+    if(isStockist){
+      // Branch Tag / No. of Outlets / Scope — plain text inputs directly
+      // below the existing right-column fields. Only render when the
+      // projField was actually present, so stockistbase imports that lack
+      // one or more of these simply omit the row.
+      if(branchTagF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Branch Tag:</div><input class="ef-input" type="text" data-field="${branchTagF}" value="${esc(getFieldVal(r,branchTagF))}" ${dis}>`;rc.appendChild(w);}
+      if(outletsF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Outlets:</div><input class="ef-input" type="text" data-field="${outletsF}" value="${esc(getFieldVal(r,outletsF))}" ${dis}>`;rc.appendChild(w);}
+      if(scopeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Scope:</div><input class="ef-input" type="text" data-field="${scopeF}" value="${esc(getFieldVal(r,scopeF))}" ${dis}>`;rc.appendChild(w);}
+    }
     if(onsiteF){const rawOnsite=(r[onsiteF]||'').split(',').map(s=>s.trim()).filter(Boolean);const checked=rawOnsite.map(v=>ONSITE_OPT.find(o=>o===v||o.toLowerCase().includes(v.toLowerCase())||v.toLowerCase().includes(o.toLowerCase()))||v);const ow=document.createElement('div');ow.className='onsite-wrap';ow.innerHTML=`<div class="onsite-title">Other onsite activity:</div><div class="onsite-list">${ONSITE_OPT.map(o=>`<label class="onsite-item"><input type="checkbox" data-onsite="${o}" ${checked.includes(o)?'checked':''} ${dis}> ${o}</label>`).join('')}</div>`;rc.appendChild(ow);}
     if(isWDC){
       if(wdcCoSizeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">No. of Employees:</div>';w.appendChild(mkWDCCodeSel(wdcCoSizeF,WDC_CO_SIZE_OPT,WDC_CO_SIZE_LABELS,getFieldVal(r,wdcCoSizeF)||'',locked));rc.appendChild(w);}
@@ -2481,7 +2553,12 @@ function buildWBForm(cont,r,locked,fields){
   // Remaining unhandled fields
   // Collect all contact field names properly
   const contactFieldVals=contactCols.flatMap(c=>Object.values(typeof c.col==='object'?c.col:c));
-  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(pnf?[pnf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]) ]);
+  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(pnf?[pnf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]),
+    // Stockistbase — mark every BM-specific field as handled so the
+    // "<ProjectName> Fields" remainder section doesn't re-render them as
+    // generic text inputs below the main grid. Other Contacts is handled
+    // here too — it's deliberately never rendered.
+    ...(branchTelF?[branchTelF]:[]),...(branchTagF?[branchTagF]:[]),...(outletsF?[outletsF]:[]),...(scopeF?[scopeF]:[]),...(heavyLightF?[heavyLightF]:[]),...(otherContactsF?[otherContactsF]:[]),...(otherServicesF?[otherServicesF]:[]),...(associationF?[associationF]:[]),...(oldMerchantTypeF?[oldMerchantTypeF]:[]),...(oldBuyingGroupF?[oldBuyingGroupF]:[])]);
   const rem=fields.filter(f=>!allHandled.has(f));
   if(rem.length){
     const remTitle=(currentProject?.name||'Project')+' Fields';
@@ -3778,7 +3855,12 @@ function buildExportAOA(data){
   function looseKey(f){return String(f).toLowerCase().replace(/[^a-z0-9]/g,'');}
   const normSeen=new Set();
   const fields=[];
+  // Stockistbase — Other Contacts was replaced by the BM-specific field
+  // block and is explicitly never exported; skip any case/separator variant
+  // of that field name.
+  const isStockistExport=currentProject?.database_family==='stockistbase';
   projFields.filter(f=>!SKIP.has(f)).forEach(f=>{
+    if(isStockistExport&&/^other[\s_\-]*contacts?$/i.test(String(f)))return;
     const nk=normKey(f);
     if(!normSeen.has(nk)){normSeen.add(nk);fields.push(f);}
   });
