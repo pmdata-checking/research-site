@@ -957,6 +957,15 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
   </div>
 </div>
 
+<!-- HEAD OFFICE SIDE PANEL (stockistbase Branch Tag lookup) -->
+<div class="side-panel" id="hoPanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title" id="hoPanelTitle">🏢 Head Office</span>
+    <button class="side-panel-close" onclick="event.stopPropagation();closeHoPanel()" title="Close">✕</button>
+  </div>
+  <div class="side-panel-body" id="hoPanelBody"></div>
+</div>
+
 <!-- EMAIL COMPOSER MODAL -->
 <div class="modal-overlay" id="notesReviewModal">
   <div class="modal" style="width:520px;">
@@ -1028,6 +1037,7 @@ const MERCHANT_TYPE_OPT=['Timber & Joinery Products','Heavy Building Materials',
 const BUYING_GROUP_OPT=['None','PHG','NBG','H&B','IBC','IPG','FORTIS','TBG'];
 const HEAVY_LIGHT_OPT=['Heavyside','Lightside'];
 const ASSOCIATION_OPT=['NMBS','BMF'];
+const SCOPE_OPT=['National','Regional','Independent'];
 const EMP_OPT=['A : <10 Employees','B : 10–24 Employees','C : 25–49 Employees','D : 50–99 Employees','E : 100–249 Employees','F : 250+ Employees'];
 const ONSITE_OPT=["# : Don't know or refused",'Factory','Showroom','Sales Office','Warehouse','Workshop','Depot','Distribution Centre'];
 // Maps short codes to full option strings
@@ -2380,9 +2390,19 @@ function buildWBForm(cont,r,locked,fields){
   const associationF=isStockist?ff(['ASSOCIATION','Association']):null;
   const oldMerchantTypeF=isStockist?ff(['MERCHANT_TYPE','Merchant_Type','MERCHANTTYPE','MerchantType']):null;
   const oldBuyingGroupF=isStockist?ff(['BUYING_GROUP','Buying_Group','BUYINGGROUP','BuyingGroup']):null;
+  // Parent Company — editable free text in the mid column, just below aka.
+  // Use canonical PARENT_CO as fallback data-field so new saves land there
+  // even when the imported projFields didn't carry a Parent Company column.
+  const parentCoF=isStockist?(ff(['PARENT_CO','Parent_Co','PARENTCO','Parent_Company','PARENT_COMPANY'])||'PARENT_CO'):null;
   // Branch Tel sits in the mid column under Fax — push into midF so the
   // existing loop renders it inline with the other mid-column fields.
   if(branchTelF&&!midF.includes(branchTelF))midF.push(branchTelF);
+  // Parent Company inserted directly after the aka/AKA position in midF,
+  // or appended if no aka column was found.
+  if(parentCoF&&!midF.includes(parentCoF)){
+    const akaIdx=midF.findIndex(f=>f.toLowerCase()==='aka');
+    if(akaIdx>=0)midF.splice(akaIdx+1,0,parentCoF);else midF.push(parentCoF);
+  }
   const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist);
   const countryF=ff(['Country','COUNTRY']);
   if(leftF.length||midF.length||hasRight){
@@ -2400,6 +2420,8 @@ function buildWBForm(cont,r,locked,fields){
     midF.forEach(f=>{const w=document.createElement('div');w.className='ef-field';const fup=f.toUpperCase();
       if(isStockist&&branchTelF&&f===branchTelF){
         w.innerHTML=`<div class="ef-label">Branch Tel</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;
+      }else if(isStockist&&parentCoF&&f===parentCoF){
+        w.innerHTML=`<div class="ef-label">Parent Company</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;
       }else if(fup==='ACCREDITATIONS'){
         const stored=(getFieldVal(r,f)||'').split(/\s*,\s*/).filter(Boolean);
         w.innerHTML='<div class="ef-label">Accreditations</div>';
@@ -2417,9 +2439,13 @@ function buildWBForm(cont,r,locked,fields){
     // [data-multi-field] plumbing so the generic saveMulti listener joins
     // checked values with "/" on change.
     if(isStockist){
+      // Section-header-style labels (matches the CONTACTS banner look) for
+      // the two checkbox groups that live in the mid column. Top border
+      // gives a visual separation from the Branch Tel row above.
+      const sectionLabelStyle='font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);padding-top:10px;border-top:1px solid var(--border);margin-bottom:6px;';
       const bgDataField=oldBuyingGroupF||'BUYING_GROUP';
       const bgWrap=document.createElement('div');bgWrap.className='ef-field';bgWrap.style.marginTop='20px';
-      bgWrap.innerHTML='<div class="ef-label">Buying Group:</div>';
+      bgWrap.innerHTML=`<div style="${sectionLabelStyle}">Buying Group</div>`;
       const bgStored=(getFieldVal(r,bgDataField)||'').split(/\s*\/\s*/).filter(Boolean);
       const bgGrp=document.createElement('div');bgGrp.className='wdc-check-group';bgGrp.dataset.multiField=bgDataField;
       BUYING_GROUP_OPT.forEach(opt=>{
@@ -2434,8 +2460,8 @@ function buildWBForm(cont,r,locked,fields){
       bgWrap.appendChild(bgGrp);mc.appendChild(bgWrap);
 
       const asDataField=associationF||'ASSOCIATION';
-      const asWrap=document.createElement('div');asWrap.className='ef-field';
-      asWrap.innerHTML='<div class="ef-label">Association:</div>';
+      const asWrap=document.createElement('div');asWrap.className='ef-field';asWrap.style.marginTop='14px';
+      asWrap.innerHTML=`<div style="${sectionLabelStyle}">Association</div>`;
       const asStored=(getFieldVal(r,asDataField)||'').split(/\s*\/\s*/).filter(Boolean);
       const asGrp=document.createElement('div');asGrp.className='wdc-check-group';asGrp.dataset.multiField=asDataField;
       ASSOCIATION_OPT.forEach(opt=>{
@@ -2481,13 +2507,34 @@ function buildWBForm(cont,r,locked,fields){
     if(callLevelF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Call Level:</div>';w.appendChild(mkWDCCodeSel(callLevelF,['S','R'],{'S':'S: Senior','R':'R: Reception'},getFieldVal(r,callLevelF)||'',locked));rc.appendChild(w);}
     if(empF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Employees:</div>`;w.appendChild(mkSel(empF,EMP_OPT,resolveOption(r[empF]||'',EMP_MAP,EMP_OPT),locked));rc.appendChild(w);}
     if(isStockist){
-      // Branch Tag / No. of Outlets / Scope — plain text inputs directly
-      // below the existing right-column fields. Only render when the
-      // projField was actually present, so stockistbase imports that lack
-      // one or more of these simply omit the row.
-      if(branchTagF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Branch Tag:</div><input class="ef-input" type="text" data-field="${branchTagF}" value="${esc(getFieldVal(r,branchTagF))}" ${dis}>`;rc.appendChild(w);}
-      if(outletsF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Outlets:</div><input class="ef-input" type="text" data-field="${outletsF}" value="${esc(getFieldVal(r,outletsF))}" ${dis}>`;rc.appendChild(w);}
-      if(scopeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">Scope:</div><input class="ef-input" type="text" data-field="${scopeF}" value="${esc(getFieldVal(r,scopeF))}" ${dis}>`;rc.appendChild(w);}
+      // Branch Tag — read-only display plus a "View Head Office" button
+      // that opens the side panel and POSTs to /checking/api/branch-head-office/.
+      if(branchTagF){
+        const bt=getFieldVal(r,branchTagF)||'';
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML=`<div class="ef-label">Branch Tag:</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="ef-static" style="flex:1;">${bt?esc(bt):'<span style="color:#999;font-style:italic;">Not set</span>'}</div>
+            <button class="user-action-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap;" ${bt?'':'disabled'} onclick="openHoPanelForCurrent()">🏢 View Head Office</button>
+          </div>`;
+        rc.appendChild(w);
+      }
+      // No. of Outlets — read-only display of imported value.
+      if(outletsF){
+        const ov=getFieldVal(r,outletsF)||'';
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML=`<div class="ef-label">No. of Outlets:</div><div class="ef-static">${ov?esc(ov):'<span style="color:#999;font-style:italic;">—</span>'}</div>`;
+        rc.appendChild(w);
+      }
+      // Scope — three-option dropdown. Free-text imports that don't
+      // match National / Regional / Independent render as the empty
+      // option on load and get normalised when the user selects one.
+      if(scopeF){
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML='<div class="ef-label">Scope:</div>';
+        w.appendChild(mkSel(scopeF,SCOPE_OPT,getFieldVal(r,scopeF)||'',locked));
+        rc.appendChild(w);
+      }
     }
     if(onsiteF){const rawOnsite=(r[onsiteF]||'').split(',').map(s=>s.trim()).filter(Boolean);const checked=rawOnsite.map(v=>ONSITE_OPT.find(o=>o===v||o.toLowerCase().includes(v.toLowerCase())||v.toLowerCase().includes(o.toLowerCase()))||v);const ow=document.createElement('div');ow.className='onsite-wrap';ow.innerHTML=`<div class="onsite-title">Other onsite activity:</div><div class="onsite-list">${ONSITE_OPT.map(o=>`<label class="onsite-item"><input type="checkbox" data-onsite="${o}" ${checked.includes(o)?'checked':''} ${dis}> ${o}</label>`).join('')}</div>`;rc.appendChild(ow);}
     if(isWDC){
@@ -2558,7 +2605,7 @@ function buildWBForm(cont,r,locked,fields){
     // "<ProjectName> Fields" remainder section doesn't re-render them as
     // generic text inputs below the main grid. Other Contacts is handled
     // here too — it's deliberately never rendered.
-    ...(branchTelF?[branchTelF]:[]),...(branchTagF?[branchTagF]:[]),...(outletsF?[outletsF]:[]),...(scopeF?[scopeF]:[]),...(heavyLightF?[heavyLightF]:[]),...(otherContactsF?[otherContactsF]:[]),...(otherServicesF?[otherServicesF]:[]),...(associationF?[associationF]:[]),...(oldMerchantTypeF?[oldMerchantTypeF]:[]),...(oldBuyingGroupF?[oldBuyingGroupF]:[])]);
+    ...(branchTelF?[branchTelF]:[]),...(branchTagF?[branchTagF]:[]),...(outletsF?[outletsF]:[]),...(scopeF?[scopeF]:[]),...(heavyLightF?[heavyLightF]:[]),...(otherContactsF?[otherContactsF]:[]),...(otherServicesF?[otherServicesF]:[]),...(associationF?[associationF]:[]),...(oldMerchantTypeF?[oldMerchantTypeF]:[]),...(oldBuyingGroupF?[oldBuyingGroupF]:[]),...(parentCoF&&midF.includes(parentCoF)?[parentCoF]:[])]);
   const rem=fields.filter(f=>!allHandled.has(f));
   if(rem.length){
     const remTitle=(currentProject?.name||'Project')+' Fields';
@@ -6990,6 +7037,92 @@ function closeCsPanel(){
     const toggleBtn=gel('csPanelToggle');if(toggleBtn)toggleBtn.textContent='‹';
   }
   csPanelApplyPadding();
+}
+
+// ── Head Office side panel (stockistbase Branch Tag lookup) ──
+function hoPanelApplyPadding(){
+  const panel=gel('hoPanel');
+  if(!panel||!panel.classList.contains('open')){
+    // Don't stomp CS panel's padding if it's the one that's open.
+    const cs=gel('csModal');
+    if(!cs||!cs.classList.contains('open'))document.documentElement.style.setProperty('--cs-panel-pad','0');
+    return;
+  }
+  const w=panel.getBoundingClientRect().width||Math.round(window.innerWidth*0.35);
+  document.documentElement.style.setProperty('--cs-panel-pad',w+'px');
+}
+function openHoPanelForCurrent(){
+  if(currentIdx<0||!records[currentIdx])return;
+  const r=records[currentIdx];
+  const tag=String(getFieldVal(r,'BRANCH_TAG')||getFieldVal(r,'Branch_Tag')||'').trim();
+  if(!tag){showToast('This record has no Branch Tag','error');return;}
+  openHoPanel(tag);
+}
+async function openHoPanel(branchTag){
+  // Close CreditSafe panel if open — one side panel at a time keeps the
+  // --cs-panel-pad reflow predictable.
+  const cs=gel('csModal');if(cs&&cs.classList.contains('open'))closeCsPanel();
+  const panel=gel('hoPanel');if(!panel)return;
+  panel.classList.add('open');
+  gel('hoPanelTitle').textContent='🏢 Head Office — '+branchTag;
+  gel('hoPanelBody').innerHTML='<div style="text-align:center;padding:20px;"><div class="ld-spin" style="margin:0 auto 8px;"></div><div style="font-size:12px;color:var(--muted);">Loading…</div></div>';
+  hoPanelApplyPadding();
+  try{
+    const res=await fetch('https://checking.prospectmanager.co.uk/checking/api/branch-head-office/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({branch_tag:branchTag})
+    });
+    const raw=await res.text();
+    let data={};try{data=JSON.parse(raw);}catch(e){}
+    if(!res.ok){
+      const msg=(data&&data.error)||'Lookup failed ('+res.status+')';
+      gel('hoPanelBody').innerHTML='<div style="padding:16px;background:#fef5f5;border:1px solid #f3c7c7;border-radius:6px;color:var(--danger);font-size:13px;">'+esc(msg)+'</div>';
+      return;
+    }
+    renderHoPanel(data);
+  }catch(err){
+    gel('hoPanelBody').innerHTML='<div style="padding:16px;background:#fef5f5;border:1px solid #f3c7c7;border-radius:6px;color:var(--danger);font-size:13px;">'+esc(String(err.message||err))+'</div>';
+  }
+}
+function renderHoPanel(d){
+  const row=(label,value,copyFn,copyLabel)=>{
+    const safe=esc(value||'');
+    const hasCopy=!!(value&&copyFn);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="flex:1;">
+        <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${esc(label)}</div>
+        <div style="font-size:13px;color:var(--text);">${value?safe:'<span style="color:#999;font-style:italic;">Not available</span>'}</div>
+      </div>
+      ${hasCopy?`<button class="user-action-btn" style="font-size:10px;padding:4px 10px;white-space:nowrap;" onclick="${copyFn}(this,'${safe.replace(/'/g,"\\'")}')">→ Copy to ${esc(copyLabel)}</button>`:''}
+    </div>`;
+  };
+  const addrParts=[d.add1,d.add2,d.town,d.county,d.postcode].map(v=>String(v||'').trim()).filter(Boolean);
+  gel('hoPanelBody').innerHTML=`
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+      <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Company</div>
+      <div style="font-size:16px;font-weight:700;color:var(--navy);">${d.company?esc(d.company):'<span style="color:#999;font-style:italic;">Not available</span>'}</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+      <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Address</div>
+      <div style="font-size:13px;line-height:1.5;color:var(--text);">${addrParts.length?addrParts.map(esc).join('<br>'):'<span style="color:#999;font-style:italic;">Not available</span>'}</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;">
+      <div style="font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Contact</div>
+      ${row('Phone',d.phone,'hoCopyPhone','Main Phone')}
+      ${row('Email',d.email,'hoCopyEmail','Main Email')}
+    </div>`;
+}
+function hoCopyPhone(btn,value){
+  csCopyField(btn,['Co_Phone','PHONE','Phone','Co_Phone','COPHONE'],value);
+}
+function hoCopyEmail(btn,value){
+  csCopyField(btn,['Co_E-mail','CO_EMAIL','Co_Email','co_email','Co E-mail'],value);
+}
+function closeHoPanel(){
+  const panel=gel('hoPanel');if(!panel)return;
+  panel.classList.remove('open');
+  hoPanelApplyPadding();
 }
 
 // ── TEMPLATE LIBRARY ───────────────────────────────────────
