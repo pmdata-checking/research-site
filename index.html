@@ -6537,9 +6537,10 @@ async function csLoadReport(connectId){
     gel('csReportContent').innerHTML=`
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
-        console.log('profitAndLoss:', JSON.stringify(rpt.financialStatements?.[0]?.profitAndLoss));
-        console.log('otherFinancials:', JSON.stringify(rpt.financialStatements?.[0]?.otherFinancials));
-        console.log('ratios:', JSON.stringify(rpt.financialStatements?.[0]?.ratios));
+        console.log('Report top-level keys:', Object.keys(rpt));
+        console.log('otherInformation:', JSON.stringify(rpt.otherInformation));
+        console.log('employeesInformation:', JSON.stringify(rpt.employeesInformation));
+        console.log('additionalInformation full:', JSON.stringify(rpt.additionalInformation));
         const fs0=rpt.financialStatements?.[0]||{};
         const lfs0=rpt.localFinancialStatements?.[0]||{};
         const emp=fs0.miscellaneous?.numberOfEmployees
