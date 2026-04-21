@@ -1997,7 +1997,6 @@ function updateVerfileRemoveBtn(){
   const label='🗑 Remove Selected ('+count+')';
   ['removeVerfileBtn','removeVerfileCbBtn'].forEach(id=>{
     const btn=gel(id);
-    console.log('[Verfile] updateRemoveBtn',id,'found=',!!btn,'count=',count);
     if(!btn)return;
     // Use an explicit display value — setting to '' can leave the original
     // inline "display:none" in place on some browsers / style-attribute setters.
@@ -6538,8 +6537,17 @@ async function csLoadReport(connectId){
     gel('csReportContent').innerHTML=`
       ${(()=>{
         const naStyle='color:#999;font-style:italic;';
-        console.log('Employees raw:', JSON.stringify(rpt.additionalInformation));
-        const emp=rpt.additionalInformation?.employeesInformation?.numberOfEmployees
+        console.log('Financial statements keys:', Object.keys(rpt.financialStatements?.[0]||{}));
+        console.log('Miscellaneous:', JSON.stringify(rpt.financialStatements?.[0]?.miscellaneous));
+        const fs0=rpt.financialStatements?.[0]||{};
+        const lfs0=rpt.localFinancialStatements?.[0]||{};
+        const emp=fs0.miscellaneous?.numberOfEmployees
+                ??fs0.profitAndLoss?.numberOfEmployees
+                ??fs0.otherFinancials?.numberOfEmployees
+                ??lfs0.miscellaneous?.numberOfEmployees
+                ??lfs0.profitAndLoss?.numberOfEmployees
+                ??lfs0.otherFinancials?.numberOfEmployees
+                ??rpt.additionalInformation?.employeesInformation?.numberOfEmployees
                 ??rpt.additionalInformation?.employees
                 ??rpt.companySummary?.numberOfEmployees
                 ??rpt.companyIdentification?.basicInformation?.numberOfEmployees
