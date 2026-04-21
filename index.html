@@ -3720,12 +3720,27 @@ function buildExportAOA(data){
   const EXPORT_RENAME={'co_e-mail':'CO_EMAIL','co_email':'CO_EMAIL','coemail':'CO_EMAIL','co e-mail':'CO_EMAIL','cty':'COUNTY'};
   function exportHeader(f){if(REF_NAMES.has(f.toLowerCase()))return 'REF';return EXPORT_RENAME[f.toLowerCase()]||f;}
   function normKey(f){return f.toLowerCase().replace(/[\s_\-]+/g,'_');}
+  // Relaxed key used only for bestVal's fallback: collapses case AND every
+  // non-alphanumeric separator so "Co_E-mail" and "CO_EMAIL" both become
+  // "coemail". normKey alone can't do that because the letter "E" between
+  // "_" and "-" in "Co_E-mail" breaks the [\s_\-]+ run.
+  function looseKey(f){return String(f).toLowerCase().replace(/[^a-z0-9]/g,'');}
   const normSeen=new Set();
   const fields=[];
   projFields.filter(f=>!SKIP.has(f)).forEach(f=>{
     const nk=normKey(f);
     if(!normSeen.has(nk)){normSeen.add(nk);fields.push(f);}
   });
+  // TEMP diagnostic: for the first record, dump r.data keys matching any of
+  // the fields the user reported as missing so we can confirm the actual
+  // storage names. Remove once verified.
+  if(data[0]&&data[0].data){
+    const dk=Object.keys(data[0].data);
+    const pick=(patt)=>dk.filter(k=>patt.test(k.toLowerCase()));
+    console.log('[exportAOA] data.keys matching email:',pick(/email|e-mail/));
+    console.log('[exportAOA] data.keys matching title/first/surname:',pick(/title|first|surname|firstn/));
+    console.log('[exportAOA] data.keys matching country/company_number:',pick(/country|company.?number|co.?number/));
+  }
   function bestVal(r,f){
     let v=r[f];
     if((v===undefined||v===null||v==='')&&r.data){
@@ -3736,6 +3751,18 @@ function buildExportAOA(data){
     if(v===undefined||v===null||v===''){
       const nk=normKey(f);
       const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&normKey(k)===nk);
+      if(directKey)v=r[directKey];
+    }
+    // Final fallback with the relaxed key — catches hyphen/underscore/space
+    // mismatches like Co_E-mail vs CO_EMAIL that the normKey fallbacks miss.
+    if((v===undefined||v===null||v==='')&&r.data){
+      const lk=looseKey(f);
+      const dataKey=Object.keys(r.data).find(k=>looseKey(k)===lk);
+      if(dataKey)v=r.data[dataKey];
+    }
+    if(v===undefined||v===null||v===''){
+      const lk=looseKey(f);
+      const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&looseKey(k)===lk);
       if(directKey)v=r[directKey];
     }
     return v;
