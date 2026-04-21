@@ -3765,6 +3765,13 @@ function buildExportAOA(data){
       const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&looseKey(k)===lk);
       if(directKey)v=r[directKey];
     }
+    // TEMP diagnostic: for the FIRST record only, log the incoming f (the
+    // projField name being exported), its looseKey, and the final value
+    // for fields that match the reported-missing columns. Remove once
+    // verified working.
+    if(r===data[0]&&/email|title|first|surname|firstn|country|company.?number|co.?number/i.test(f)){
+      console.log('[bestVal] looking for:',f,'looseKey:',looseKey(f),'value:',v);
+    }
     return v;
   }
   function cleanVal(v){
