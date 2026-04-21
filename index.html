@@ -3692,30 +3692,25 @@ function parseCSV(text){
   return{hdrs,recs};
 }
 
-function toCSV(data){
+// Shared header/row builder used by both CSV and xlsx exports
+function buildExportAOA(data){
   const REF_NAMES=new Set(['suref','wbref','sbref','wdc_wbref']);
   const EXPORT_RENAME={'co_e-mail':'CO_EMAIL','co_email':'CO_EMAIL','coemail':'CO_EMAIL','co e-mail':'CO_EMAIL','cty':'COUNTY'};
   function exportHeader(f){if(REF_NAMES.has(f.toLowerCase()))return 'REF';return EXPORT_RENAME[f.toLowerCase()]||f;}
   function normKey(f){return f.toLowerCase().replace(/[\s_\-]+/g,'_');}
-
-  // Deduplicate fields: normalise names, keep one per normalised key
   const normSeen=new Set();
   const fields=[];
   projFields.filter(f=>!SKIP.has(f)).forEach(f=>{
     const nk=normKey(f);
     if(!normSeen.has(nk)){normSeen.add(nk);fields.push(f);}
   });
-
-  // Get the best value for a field from a record — check direct column, then data blob
   function bestVal(r,f){
     let v=r[f];
-    // Also check data blob under all name variants
     if((v===undefined||v===null||v==='')&&r.data){
       const nk=normKey(f);
       const dataKey=Object.keys(r.data).find(k=>normKey(k)===nk);
       if(dataKey)v=r.data[dataKey];
     }
-    // Also check direct column under normalised variant
     if(v===undefined||v===null||v===''){
       const nk=normKey(f);
       const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&normKey(k)===nk);
@@ -3723,31 +3718,62 @@ function toCSV(data){
     }
     return v;
   }
-
   function cleanVal(v){
     let s=String(v??'');
     if(s==='(no)')return '';
     s=s.replace(/^[\s\/,]+|[\s\/,]+$/g,'').replace(/\s*[\/,]\s*[\/,]\s*/g,'/');
     return s;
   }
-  const e2=v=>{const s=cleanVal(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`:`${s}`;};
   const headers=fields.map(exportHeader);
-  if(!data.length)return headers.map(e2).join(',')+'\n';
-  return[headers.map(e2).join(','),...data.map(r=>fields.map(f=>e2(bestVal(r,f))).join(','))].join('\n');
+  const rows=data.map(r=>fields.map(f=>cleanVal(bestVal(r,f))));
+  return {headers, rows};
 }
+
+function toCSV(data){
+  const {headers, rows}=buildExportAOA(data);
+  const e2=s=>(s.includes(',')||s.includes('"')||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`:`${s}`;
+  if(!rows.length)return headers.map(e2).join(',')+'\n';
+  return [headers.map(e2).join(','),...rows.map(r=>r.map(e2).join(','))].join('\n');
+}
+// Family-to-slug map for Done export filenames. Projects without a family
+// fall back to the first 3 letters of the project name (lowercased, a-z only).
+const DONE_EXPORT_SLUGS={windowbase:'wdc',stockistbase:'bm',rooflinebase:'roof',specifiersbase:'spec',builderbase:'bai'};
+function doneExportSlug(project){
+  const fam=(project?.database_family||'').toLowerCase();
+  if(DONE_EXPORT_SLUGS[fam])return DONE_EXPORT_SLUGS[fam];
+  const nameSlug=(project?.name||'project').toLowerCase().replace(/[^a-z]/g,'').slice(0,3);
+  return nameSlug||'prj';
+}
+
 async function exportList(type){
   if(!hasPermission('can_export')){showToast('You do not have export permission','error');return;}
-  let data,fn;const n=(currentProject?.name||'project').replace(/[^a-z0-9]/gi,'-').toLowerCase();
+  let data,fn,isXlsx=false;
+  const n=(currentProject?.name||'project').replace(/[^a-z0-9]/gi,'-').toLowerCase();
   if(type==='Ready'){data=records.filter(r=>r._status==='Ready');fn=n+'-ready.csv';}
   else if(type==='Callback'){data=records.filter(r=>r._status==='Callback');fn=n+'-callbacks.csv';}
-  else if(type==='Done'){data=records.filter(r=>r._status==='Done');fn=n+'-done.csv';}
+  else if(type==='Done'){
+    data=records.filter(r=>r._status==='Done');
+    const d=new Date();
+    const ymd=d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+    fn=doneExportSlug(currentProject)+'done'+ymd+'.xlsx';
+    isXlsx=true;
+  }
   else{data=records;fn=n+'-all.csv';}
 
   if(!data.length){showToast('No records to export','info');return;}
 
   // Download first
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([toCSV(data)],{type:'text/csv'}));
+  if(isXlsx){
+    const {headers, rows}=buildExportAOA(data);
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb,ws,'Done');
+    const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  } else {
+    a.href=URL.createObjectURL(new Blob([toCSV(data)],{type:'text/csv'}));
+  }
   a.download=fn;a.click();
 
   // Offer to delete the exported records from the database
