@@ -3731,48 +3731,44 @@ function buildExportAOA(data){
     const nk=normKey(f);
     if(!normSeen.has(nk)){normSeen.add(nk);fields.push(f);}
   });
-  // TEMP diagnostic: for the first record, dump r.data keys matching any of
-  // the fields the user reported as missing so we can confirm the actual
-  // storage names. Remove once verified.
-  if(data[0]&&data[0].data){
-    const dk=Object.keys(data[0].data);
-    const pick=(patt)=>dk.filter(k=>patt.test(k.toLowerCase()));
-    console.log('[exportAOA] data.keys matching email:',pick(/email|e-mail/));
-    console.log('[exportAOA] data.keys matching title/first/surname:',pick(/title|first|surname|firstn/));
-    console.log('[exportAOA] data.keys matching country/company_number:',pick(/country|company.?number|co.?number/));
+  // Look up f in the provided bag (r or r.data) using a key-normaliser and
+  // return the FIRST non-empty value among all keys that share the same
+  // normalised form. Using `Array.find(...)` would only consider the first
+  // matching key, which is buggy when the same logical field exists under
+  // multiple stored names (e.g. "Title_1" from the original upload and
+  // "Title 1" from the form edit both end up in r.data after a save+reload)
+  // and the first-encountered one happens to be empty.
+  function firstNonEmpty(bag,targetKey,norm,skipDataKey){
+    if(!bag||typeof bag!=='object')return undefined;
+    const target=norm(targetKey);
+    let seenMatch=false, firstEmptyKey=null;
+    for(const k of Object.keys(bag)){
+      if(skipDataKey&&(k==='data'||SKIP.has(k)))continue;
+      if(norm(k)!==target)continue;
+      const val=bag[k];
+      if(val!==undefined&&val!==null&&val!=='')return val;
+      if(!seenMatch){seenMatch=true;firstEmptyKey=k;}
+    }
+    // If at least one key matched but all were empty, surface the first
+    // empty match so the caller still sees a defined (blank) value rather
+    // than fully undefined.
+    return seenMatch?bag[firstEmptyKey]:undefined;
   }
   function bestVal(r,f){
-    let v=r[f];
-    if((v===undefined||v===null||v==='')&&r.data){
-      const nk=normKey(f);
-      const dataKey=Object.keys(r.data).find(k=>normKey(k)===nk);
-      if(dataKey)v=r.data[dataKey];
-    }
-    if(v===undefined||v===null||v===''){
-      const nk=normKey(f);
-      const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&normKey(k)===nk);
-      if(directKey)v=r[directKey];
-    }
-    // Final fallback with the relaxed key — catches hyphen/underscore/space
-    // mismatches like Co_E-mail vs CO_EMAIL that the normKey fallbacks miss.
-    if((v===undefined||v===null||v==='')&&r.data){
-      const lk=looseKey(f);
-      const dataKey=Object.keys(r.data).find(k=>looseKey(k)===lk);
-      if(dataKey)v=r.data[dataKey];
-    }
-    if(v===undefined||v===null||v===''){
-      const lk=looseKey(f);
-      const directKey=Object.keys(r).find(k=>k!=='data'&&!SKIP.has(k)&&looseKey(k)===lk);
-      if(directKey)v=r[directKey];
-    }
-    // TEMP diagnostic: for the FIRST record only, log the incoming f (the
-    // projField name being exported), its looseKey, and the final value
-    // for fields that match the reported-missing columns. Remove once
-    // verified working.
-    if(r===data[0]&&/email|title|first|surname|firstn|country|company.?number|co.?number/i.test(f)){
-      console.log('[bestVal] looking for:',f,'looseKey:',looseKey(f),'value:',v);
-    }
-    return v;
+    if(r[f]!==undefined&&r[f]!==null&&r[f]!=='')return r[f];
+    let v;
+    // Tier 1: normKey match in r.data, then in r top-level.
+    v=firstNonEmpty(r.data,f,normKey,false);
+    if(v!==undefined&&v!=='')return v;
+    v=firstNonEmpty(r,f,normKey,true);
+    if(v!==undefined&&v!=='')return v;
+    // Tier 2: looseKey match (catches Co_E-mail vs CO_EMAIL etc. where
+    // normKey can't bridge hyphen/underscore because of letters between).
+    v=firstNonEmpty(r.data,f,looseKey,false);
+    if(v!==undefined&&v!=='')return v;
+    v=firstNonEmpty(r,f,looseKey,true);
+    if(v!==undefined&&v!=='')return v;
+    return r[f];
   }
   function cleanVal(v){
     let s=String(v??'');
