@@ -958,6 +958,16 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 </div>
 
 <!-- EMAIL COMPOSER MODAL -->
+<div class="modal-overlay" id="emailSuggestModal">
+  <div class="modal" style="width:440px;">
+    <h3>Send an Email?</h3>
+    <div class="modal-sub" style="margin-bottom:18px;">The Result suggests you weren't able to speak to the contact. Would you like to send an email to this contact?</div>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" onclick="emailSuggestAnswer(true)">Yes, send email</button>
+      <button class="mbtn mbtn-cancel" onclick="emailSuggestAnswer(false)">Skip</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="emailModal">
   <div class="modal" style="width:640px;max-height:90vh;overflow-y:auto;">
     <h3>Send Email</h3>
@@ -3147,8 +3157,20 @@ async function doTagRec(status){
 
   showToast(status==='Done'?'Marked as Done':status==='Callback'?'Moved to Callbacks':'Re-queued',status==='Done'?'done':status==='Callback'?'callback':'info');
 
-  // Offer to send email if the record has email addresses — await so navigation doesn't skip past it
-  if(status==='Done'||status==='Callback'){await maybeShowEmailPrompt(currentIdx);}
+  // Offer to send email if the record has email addresses — await so navigation doesn't skip past it.
+  // For Done results that imply no human contact (Desk Only / Ansph / NR / VM / No Reply) we gate the
+  // composer behind a Yes/Skip suggestion modal so the researcher explicitly chooses to send.
+  if(status==='Callback'){
+    await maybeShowEmailPrompt(currentIdx);
+  } else if(status==='Done'){
+    const resultVal=getFieldVal(r,'Result')||'';
+    const noContactResult=/desk only|ansph|anpsh|no reply/i.test(resultVal)||/\b(nr|vm)\b/i.test(resultVal);
+    if(noContactResult){
+      if(await maybeShowEmailSuggestion(currentIdx))await maybeShowEmailPrompt(currentIdx);
+    } else {
+      await maybeShowEmailPrompt(currentIdx);
+    }
+  }
 
   await releaseLock(currentIdx);clearInterval(lockCD);updateCounts();
 
@@ -6107,6 +6129,29 @@ function getContactNameForEmail(r,field){
   // Map email field to contact number and return first name only
   const num=field.match(/_(\d)$/)?.[1]||'1'; // default to Contact 1 for Co_E-mail
   return(r['Firstn_'+num]||getFieldVal(r,'Firstn_'+num)||getFieldVal(r,'Firstn '+num)||'').trim();
+}
+
+let _emailSuggestResolve=null;
+// Post-Done suggestion prompt shown for results where the researcher
+// didn't actually speak to the contact (Desk Only / Ansph / NR / VM /
+// No Reply). Returns Promise<boolean>: true = user wants the composer,
+// false = Skip, or one of the gates skipped it silently.
+function maybeShowEmailSuggestion(recordIdx){
+  if(recordIdx<0||!records[recordIdx])return Promise.resolve(false);
+  const r=records[recordIdx];
+  // Gate 1: record must have at least one populated email — same check
+  // the existing composer uses for its own visibility.
+  if(!getRecordEmails(r).length)return Promise.resolve(false);
+  // Gate 2: skip if Private Notes already carries an "Email sent" stamp
+  // (auto-stamped in doSendEmail — any prior send, this session or earlier).
+  const pn=String(getFieldVal(r,'Private_Notes')||'');
+  if(/email sent/i.test(pn))return Promise.resolve(false);
+  openModal('emailSuggestModal');
+  return new Promise(resolve=>{_emailSuggestResolve=resolve;});
+}
+function emailSuggestAnswer(yes){
+  closeModal('emailSuggestModal');
+  if(_emailSuggestResolve){_emailSuggestResolve(!!yes);_emailSuggestResolve=null;}
 }
 
 let _emailResolve=null;
