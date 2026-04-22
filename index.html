@@ -2926,6 +2926,18 @@ async function sendToCall(){
   const name=getFieldVal(r,'Company')||getFieldVal(r,'COMPANY')||getFieldVal(r,'suref')||'this record';
   if(!confirm('Add "'+name+'" to the To Call list?\n\nThis will set the Result to "Desk Only" and move the record to the New Records project for telephone research.'))return;
 
+  // Snapshot contact fields BEFORE any mutation — used for diagnostic comparison and to build
+  // the copy for the companion project from a pristine source (never from mutated r).
+  const contactDebugKeys=['Title_1','Firstn_1','Surname_1','Position_1','Phone_1','E-Mail_1','LinkedIn_1','Title_2','Firstn_2','Surname_2','Position_2','Phone_2','E-Mail_2','LinkedIn_2','Title_3','Firstn_3','Surname_3','Position_3','Phone_3','E-Mail_3','LinkedIn_3'];
+  const snapContacts=(rec)=>{const o={};contactDebugKeys.forEach(k=>{o[k]=getFieldVal(rec,k);});return o;};
+  const originalContactsBefore=snapContacts(r);
+  console.log('[sendToCall] BEFORE — original contacts:',JSON.parse(JSON.stringify(originalContactsBefore)));
+  // Pristine deep-clone of the original record for building the copy later.
+  // Must be taken BEFORE we mutate Result/Private_Notes/Researcher/Last_up on the original.
+  const pristine={};
+  Object.keys(r).forEach(k=>{if(!SKIP.has(k)&&k!=='data'&&k!=='id')pristine[k]=r[k];});
+  if(r.data)Object.keys(r.data).forEach(k=>{if(!SKIP.has(k))pristine[k]=r.data[k];});
+
   // Set Result to "Desk Only"
   const resultKey=Object.keys(r).find(k=>k.toLowerCase()==='result')||'Result';
   records[currentIdx][resultKey]='Desk Only';
@@ -2974,17 +2986,35 @@ async function sendToCall(){
   }
 
   if(companion){
-    // Build copy of the record for the companion project, reset status to Ready
+    // Build copy of the record from the PRISTINE snapshot (not from r, which has been mutated).
+    // This guarantees nothing we do to the copy can leak back into records[currentIdx].
     const copy={};
-    Object.keys(r).forEach(k=>{if(!SKIP.has(k)&&k!=='data'&&k!=='id')copy[k]=r[k];});
-    if(r.data)Object.keys(r.data).forEach(k=>{if(!SKIP.has(k))copy[k]=r.data[k];});
+    Object.keys(pristine).forEach(k=>{copy[k]=pristine[k];});
     copy._status='Ready';copy.project_id=companion.id;copy.is_new_record=true;copy[resultKey]='';
-    // Clear the Result so the caller has to set a new one
+    // Clear contact fields on the COPY only — the original record must retain them.
+    // Matches addBranch()'s convention: Title/Firstn/Surname/Position/Phone/E-Mail/LinkedIn × _1/_2/_3.
+    const contactBases=['title','firstn','surname','position','phone','email','e-mail','linkedin'];
+    const contactSuffixes=['_1','_2','_3',' 1',' 2',' 3','1','2','3'];
+    Object.keys(copy).forEach(k=>{
+      const kl=k.toLowerCase().replace(/[_\s]/g,'');
+      contactBases.forEach(base=>{
+        const b=base.replace(/[_\s-]/g,'');
+        contactSuffixes.forEach(sfx=>{
+          if(kl===(b+sfx).toLowerCase().replace(/[_\s]/g,''))copy[k]='';
+        });
+      });
+    });
     const payload={_status:'Ready',project_id:companion.id,is_new_record:true,data:copy};
     DIRECT_COLS.forEach(col=>{if(copy[col]!==undefined)payload[col]=copy[col];});
     payload[resultKey]='';
     await sb.from('records').insert(payload);
   }
+
+  // Verify the original's contacts were NOT touched by the copy/clear logic.
+  const originalContactsAfter=snapContacts(records[currentIdx]);
+  console.log('[sendToCall] AFTER — original contacts:',JSON.parse(JSON.stringify(originalContactsAfter)));
+  const wiped=contactDebugKeys.filter(k=>(originalContactsBefore[k]||'')!==''&&(originalContactsAfter[k]||'')==='');
+  if(wiped.length)console.error('[sendToCall] ORIGINAL CONTACT FIELDS WIPED:',wiped);
 
   showToast('"'+name+'" — Desk Only → moved to To Call list','done');
   // Auto-populate Birdseye: To Call submissions count as New Companies validations
