@@ -1116,7 +1116,7 @@ function mergeRecord(r){
 }
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
-let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null,_verfileMatches={},_verfileSelected=new Set();
+let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null,_verfileMatches={},_verfileNotFound=new Set(),_verfileSelected=new Set(),_verfileCheckByProject={};
 let _impersonating=false,_realRole=null,_realPerms=null,_impersonatedEmail=null,_impersonatedName=null;
 let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
@@ -1432,11 +1432,14 @@ function renderDashboard(){
     // Callback overdue highlight
     const maxD=p.max_callback_days||0;
     const hasCallbacks=(p.callback_count||0)>0;
+    const vfCheck=_verfileCheckByProject[p.id];
+    const hasNotInVf=!!(vfCheck&&vfCheck.not_found_count>0);
     let cbBoxStyle='cursor:pointer;transition:background .15s;';
     let cbOver='';
     let cbOut='';
     if(hasCallbacks&&maxD>=5){cbBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';cbOver="this.style.background='#ffcfcf'";cbOut="this.style.background='#ffe4e4'";}
     else if(hasCallbacks&&maxD>=3){cbBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';cbOver="this.style.background='#fff1a3'";cbOut="this.style.background='#fff9c4'";}
+    else if(hasNotInVf){cbBoxStyle+='background:#fff3cd;border:1px solid #f0b400;';cbOver="this.style.background='#ffecb3'";cbOut="this.style.background='#fff3cd'";}
     else{cbOver="this.style.background='var(--hover)'";cbOut="this.style.background=''";}
     const cbStatClick=`onclick="event.stopPropagation();openProject('${p.id}','callbacks')" style="${cbBoxStyle}" onmouseover="${cbOver}" onmouseout="${cbOut}"`;
     c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${priorityBtn}${changeFamily}${pinToggle}${delBtn}</div></div>
@@ -1457,11 +1460,14 @@ function renderDashboard(){
     // Callback overdue highlight for companion
     const compMaxD=comp.max_callback_days||0;
     const compHasCb=(comp.callback_count||0)>0;
+    const compVfCheck=_verfileCheckByProject[comp.id];
+    const compHasNotInVf=!!(compVfCheck&&compVfCheck.not_found_count>0);
     let ccBoxStyle='cursor:pointer;transition:background .15s;';
     let ccOver="this.style.background='var(--hover)'";
     let ccOut="this.style.background=''";
     if(compHasCb&&compMaxD>=5){ccBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';ccOver="this.style.background='#ffcfcf'";ccOut="this.style.background='#ffe4e4'";}
     else if(compHasCb&&compMaxD>=3){ccBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';ccOver="this.style.background='#fff1a3'";ccOut="this.style.background='#fff9c4'";}
+    else if(compHasNotInVf){ccBoxStyle+='background:#fff3cd;border:1px solid #f0b400;';ccOver="this.style.background='#ffecb3'";ccOut="this.style.background='#fff3cd'";}
     cc.innerHTML=`<div class="pc-header" style="background:${headerBg};">
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
@@ -1575,7 +1581,7 @@ async function openProject(projId,initialTab){
   switchProjTab(startTab);updateCounts();trackPresence();
   // Reset verfile state and kick off a background check — matched refs cover
   // both Ready and Callback records in one call
-  _verfileMatches={};_verfileSelected.clear();updateVerfileRemoveBtn();
+  _verfileMatches={};_verfileNotFound=new Set();_verfileSelected.clear();updateVerfileRemoveBtn();
   if(hasPermission('can_check_verfile')&&(startTab==='queue'||startTab==='callbacks')){
     setTimeout(()=>checkVerfile(false),200);
   }
@@ -1783,23 +1789,26 @@ function colLabel(c){if(c==='_status')return'Status';return KNOWN[c]||c.replace(
 
 function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
   const cols=sumCols();
-  // Determine if the Verfile "Last Verified" column should show (only when matches exist on screen)
+  // Determine if the Verfile "Last Verified" column should show (when either
+  // recently-verified matches OR "not found in Verfile" amber rows exist).
   const anyVerified=withVerfile&&rows.some(r=>_verfileMatches[recordRef(r)]);
+  const anyNotFound=withVerfile&&rows.some(r=>{const ref=recordRef(r);return ref&&_verfileNotFound.has(ref);});
+  const showVfCol=anyVerified||anyNotFound;
   let headHtml='';
-  if(anyVerified){
-    headHtml+='<th style="width:32px;"><input type="checkbox" id="verfileSelectAll" onclick="toggleVerfileSelectAll(this.checked)" title="Select all recently verified"></th>';
+  if(showVfCol){
+    headHtml+='<th style="width:32px;"><input type="checkbox" id="verfileSelectAll" onclick="toggleVerfileSelectAll(this.checked)" title="Select all flagged rows (recently verified + not in Verfile)"></th>';
   }
   headHtml+=cols.map(c=>`<th>${colLabel(c)}</th>`).join('');
   if(withLastAction){
     const arrow=_cbSortAsc?'▲':'▼';
     headHtml+=`<th style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="toggleCbSort()" title="Click to toggle sort order">Last Action ${arrow}</th>`;
   }
-  if(anyVerified){
+  if(showVfCol){
     headHtml+='<th style="white-space:nowrap;">Last Verified</th>';
   }
   hEl.innerHTML=headHtml+'<th style="width:150px;"></th>';
   bEl.innerHTML='';
-  const colCount=cols.length+(withLastAction?1:0)+(anyVerified?2:0)+1;
+  const colCount=cols.length+(withLastAction?1:0)+(showVfCol?2:0)+1;
   if(!rows.length){bEl.innerHTML=`<tr><td colspan="${colCount}" class="no-rec">No records found.</td></tr>`;return;}
   // Build a regex for highlighting the search term in results
   const hlRe=searchTerm?new RegExp('('+searchTerm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'):null;
@@ -1811,10 +1820,12 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
     const tr=document.createElement('tr');
     tr.style.cursor='pointer';
     tr.onclick=()=>lockedOther?showToast('Locked by '+lockerName(r.id),'locked'):openPreview(idx);
-    const vfDate=withVerfile?_verfileMatches[recordRef(r)]:null;
+    const _ref=recordRef(r);
+    const vfDate=withVerfile?_verfileMatches[_ref]:null;
+    const vfNotFound=withVerfile&&_ref&&_verfileNotFound.has(_ref);
     let rowHtml='';
-    if(anyVerified){
-      if(vfDate){
+    if(showVfCol){
+      if(vfDate||vfNotFound){
         const checked=_verfileSelected.has(r.id)?' checked':'';
         rowHtml+='<td onclick="event.stopPropagation();"><input type="checkbox"'+checked+' onclick="event.stopPropagation();toggleVerfileRowSelect(\''+r.id+'\',this.checked)"></td>';
       } else {
@@ -1837,10 +1848,14 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
       rowHtml+=`<td style="${cellStyle}">${esc(label)}</td>`;
       if(rowBg)tr.style.background=rowBg;
     }
-    if(anyVerified){
+    if(showVfCol){
       if(vfDate){
         rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#b00020;font-weight:700;">'+esc(vfDate)+'</td>';
         tr.style.background='#ffe4e4';
+      } else if(vfNotFound){
+        rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#b45309;font-weight:700;">Not in Verfile</td>';
+        // Amber background — takes lower priority than Last Action red
+        if(!tr.style.background)tr.style.background='#fff3cd';
       } else {
         rowHtml+='<td></td>';
       }
@@ -1907,7 +1922,7 @@ async function checkVerfile(showToastOnResult){
   // Include both Ready and Callback records — one fetch covers both tabs
   const subjectRecs=records.filter(r=>(r._status==='Ready'||r._status==='Callback')&&r.project_id===currentProject.id);
   const refs=[...new Set(subjectRecs.map(recordRef).filter(Boolean))];
-  if(!refs.length){_verfileMatches={};_verfileSelected.clear();renderQ();renderCB();return;}
+  if(!refs.length){_verfileMatches={};_verfileNotFound=new Set();_verfileSelected.clear();renderQ();renderCB();return;}
   // Progress UI (manual click only) — toggle both tabs' buttons + progress bars
   const btn1=gel('checkVerfileBtn'),btn2=gel('checkVerfileCbBtn');
   const prog1=gel('verfileProgress'),prog2=gel('verfileProgressCb');
@@ -1931,7 +1946,16 @@ async function checkVerfile(showToastOnResult){
     }
     const data=await res.json();
     _verfileMatches=data.matches||{};
+    _verfileNotFound=new Set(Array.isArray(data.not_found)?data.not_found:[]);
     _verfileSelected=new Set();
+    // Cache per-project so dashboard cards can reflect amber state when the
+    // user navigates back to the dashboard without re-running the check.
+    if(currentProject?.id){
+      _verfileCheckByProject[currentProject.id]={
+        matches_count:Object.keys(_verfileMatches).length,
+        not_found_count:_verfileNotFound.size,
+      };
+    }
     // Silently update each matched record's LAST_UP when the Verfile date is newer.
     // In-memory update + Supabase write. Done in parallel, no toast/confirmation.
     syncVerfileLastUpdates(subjectRecs).catch(err=>console.warn('Verfile LAST_UP sync failed:',err));
@@ -1939,7 +1963,13 @@ async function checkVerfile(showToastOnResult){
     renderQ();renderCB();
     if(showToastOnResult){
       const n=Object.keys(_verfileMatches).length;
-      showToast(n?(n+' recently-verified record'+(n===1?'':'s')+' flagged'):'No recently-verified matches found',n?'info':'done');
+      const m=_verfileNotFound.size;
+      let msg;
+      if(n&&m)msg=n+' recently-verified + '+m+' not in Verfile flagged';
+      else if(n)msg=n+' recently-verified record'+(n===1?'':'s')+' flagged';
+      else if(m)msg=m+' record'+(m===1?'':'s')+' not in Verfile flagged';
+      else msg='No flagged records';
+      showToast(msg,(n||m)?'info':'done');
     }
   }catch(err){
     if(showToastOnResult)showToast('Verfile check error: '+(err.message||err),'error');
@@ -2006,6 +2036,18 @@ function _verfileActiveStatus(){
   const cbActive=gel('pview-callbacks')&&gel('pview-callbacks').classList.contains('active');
   return cbActive?'Callback':'Ready';
 }
+function _verfileFlaggedIdsForStatus(status){
+  // Collect IDs of all flagged rows (recently verified + not in Verfile) on
+  // the given tab within the current project.
+  const ids=new Set();
+  records.forEach(r=>{
+    if(r._status!==status||!currentProject||r.project_id!==currentProject.id)return;
+    const ref=recordRef(r);
+    if(!ref)return;
+    if(_verfileMatches[ref]||_verfileNotFound.has(ref))ids.add(r.id);
+  });
+  return ids;
+}
 function toggleVerfileRowSelect(recId,checked){
   console.log('[Verfile] row toggle',{recId,checked,activeTab:_verfileActiveStatus(),beforeSize:_verfileSelected.size});
   if(checked)_verfileSelected.add(recId);else _verfileSelected.delete(recId);
@@ -2014,23 +2056,15 @@ function toggleVerfileRowSelect(recId,checked){
   const master=gel('verfileSelectAll');
   if(master){
     const status=_verfileActiveStatus();
-    const allIds=Object.keys(_verfileMatches).map(ref=>{
-      const rec=records.find(r=>recordRef(r)===ref&&r._status===status&&r.project_id===currentProject?.id);
-      return rec?rec.id:null;
-    }).filter(Boolean);
+    const allIds=[..._verfileFlaggedIdsForStatus(status)];
     master.checked=allIds.length>0&&allIds.every(id=>_verfileSelected.has(id));
   }
 }
 function toggleVerfileSelectAll(checked){
-  // Scope to the currently visible tab's status (Ready or Callback)
+  // Scope to the currently visible tab's status (Ready or Callback).
+  // Includes both recently-verified (red) and not-in-Verfile (amber) rows.
   const status=_verfileActiveStatus();
-  // Keep selections from the OTHER tab intact; only flip this tab's items
-  const thisTabIds=new Set();
-  records.forEach(r=>{
-    if(r._status!==status||!currentProject||r.project_id!==currentProject.id)return;
-    const ref=recordRef(r);
-    if(ref&&_verfileMatches[ref])thisTabIds.add(r.id);
-  });
+  const thisTabIds=_verfileFlaggedIdsForStatus(status);
   if(checked){thisTabIds.forEach(id=>_verfileSelected.add(id));}
   else {thisTabIds.forEach(id=>_verfileSelected.delete(id));}
   if(status==='Callback')renderCB();else renderQ();
@@ -2050,7 +2084,7 @@ function updateVerfileRemoveBtn(){
 async function removeSelectedVerfile(){
   if(!_verfileSelected.size)return;
   const ids=[..._verfileSelected];
-  if(!confirm('Remove '+ids.length+' recently verified record'+(ids.length===1?'':'s')+' from this project?\n\nThis cannot be undone.'))return;
+  if(!confirm('Remove '+ids.length+' selected record'+(ids.length===1?'':'s')+' from this project?\n\n(Includes recently-verified and "not in Verfile" flagged rows.)\n\nThis cannot be undone.'))return;
   const{error}=await sb.from('records').delete().in('id',ids);
   if(error){showToast('Remove failed: '+error.message,'error');return;}
   records=records.filter(r=>!ids.includes(r.id));
