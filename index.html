@@ -1439,7 +1439,7 @@ function renderDashboard(){
     let cbOut='';
     if(hasCallbacks&&maxD>=5){cbBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';cbOver="this.style.background='#ffcfcf'";cbOut="this.style.background='#ffe4e4'";}
     else if(hasCallbacks&&maxD>=3){cbBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';cbOver="this.style.background='#fff1a3'";cbOut="this.style.background='#fff9c4'";}
-    else if(hasNotInVf){cbBoxStyle+='background:#fff3cd;border:1px solid #f0b400;';cbOver="this.style.background='#ffecb3'";cbOut="this.style.background='#fff3cd'";}
+    else if(hasNotInVf){cbBoxStyle+='background:#ffe0b2;border:1px solid #e65100;';cbOver="this.style.background='#ffcc80'";cbOut="this.style.background='#ffe0b2'";}
     else{cbOver="this.style.background='var(--hover)'";cbOut="this.style.background=''";}
     const cbStatClick=`onclick="event.stopPropagation();openProject('${p.id}','callbacks')" style="${cbBoxStyle}" onmouseover="${cbOver}" onmouseout="${cbOut}"`;
     c.innerHTML=`<div class="pc-header" style="${headerStyle}"><div class="pc-name">${esc(p.name)}</div><div style="display:flex;align-items:center;gap:4px;">${priorityBtn}${changeFamily}${pinToggle}${delBtn}</div></div>
@@ -1467,7 +1467,7 @@ function renderDashboard(){
     let ccOut="this.style.background=''";
     if(compHasCb&&compMaxD>=5){ccBoxStyle+='background:#ffe4e4;border:1px solid #f5a6a6;';ccOver="this.style.background='#ffcfcf'";ccOut="this.style.background='#ffe4e4'";}
     else if(compHasCb&&compMaxD>=3){ccBoxStyle+='background:#fff9c4;border:1px solid #ecd97b;';ccOver="this.style.background='#fff1a3'";ccOut="this.style.background='#fff9c4'";}
-    else if(compHasNotInVf){ccBoxStyle+='background:#fff3cd;border:1px solid #f0b400;';ccOver="this.style.background='#ffecb3'";ccOut="this.style.background='#fff3cd'";}
+    else if(compHasNotInVf){ccBoxStyle+='background:#ffe0b2;border:1px solid #e65100;';ccOver="this.style.background='#ffcc80'";ccOut="this.style.background='#ffe0b2'";}
     cc.innerHTML=`<div class="pc-header" style="background:${headerBg};">
         <div class="pc-name" style="font-size:12px;">${esc(comp.name)}<span class="companion-tag">New Records</span></div>
         ${isSuperuser?`<button class="pc-del" onclick="openDeleteProjModal('${comp.id}','${esc(comp.name)}',event)">✕</button>`:''}
@@ -1796,7 +1796,7 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
   const showVfCol=anyVerified||anyNotFound;
   let headHtml='';
   if(showVfCol){
-    headHtml+='<th style="width:32px;"><input type="checkbox" id="verfileSelectAll" onclick="toggleVerfileSelectAll(this.checked)" title="Select all flagged rows (recently verified + not in Verfile)"></th>';
+    headHtml+='<th style="width:32px;"><input type="checkbox" id="verfileSelectAll" onclick="toggleVerfileSelectAll(this.checked)" title="Select all flagged rows (recently verified red + not in Verfile orange)"></th>';
   }
   headHtml+=cols.map(c=>`<th>${colLabel(c)}</th>`).join('');
   if(withLastAction){
@@ -1853,9 +1853,11 @@ function renderTable(hEl,bEl,rows,searchTerm,withLastAction,withVerfile){
         rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#b00020;font-weight:700;">'+esc(vfDate)+'</td>';
         tr.style.background='#ffe4e4';
       } else if(vfNotFound){
-        rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#b45309;font-weight:700;">Not in Verfile</td>';
-        // Amber background — takes lower priority than Last Action red
-        if(!tr.style.background)tr.style.background='#fff3cd';
+        rowHtml+='<td style="font-family:var(--font);font-size:11px;white-space:nowrap;color:#e65100;font-weight:700;">&#9888;&#65039; Not in Verfile &mdash; likely Gone/NW</td>';
+        // Orange background — distinct from recently-verified red and from
+        // the yellow Last-Action "3 days" state. Only set if nothing else has
+        // already claimed the row background (Last Action red wins).
+        if(!tr.style.background)tr.style.background='#ffe0b2';
       } else {
         rowHtml+='<td></td>';
       }
@@ -1946,7 +1948,11 @@ async function checkVerfile(showToastOnResult){
     }
     const data=await res.json();
     _verfileMatches=data.matches||{};
-    _verfileNotFound=new Set(Array.isArray(data.not_found)?data.not_found:[]);
+    // Coerce to trimmed strings so Set.has() matches recordRef()'s return type,
+    // regardless of whether the server sends number-typed values.
+    _verfileNotFound=new Set(
+      (Array.isArray(data.not_found)?data.not_found:[]).map(x=>String(x==null?'':x).trim()).filter(Boolean)
+    );
     _verfileSelected=new Set();
     // Cache per-project so dashboard cards can reflect amber state when the
     // user navigates back to the dashboard without re-running the check.
@@ -2084,7 +2090,26 @@ function updateVerfileRemoveBtn(){
 async function removeSelectedVerfile(){
   if(!_verfileSelected.size)return;
   const ids=[..._verfileSelected];
-  if(!confirm('Remove '+ids.length+' selected record'+(ids.length===1?'':'s')+' from this project?\n\n(Includes recently-verified and "not in Verfile" flagged rows.)\n\nThis cannot be undone.'))return;
+  // Classify selected ids by which flag triggered them (verified vs not-found)
+  let verifiedCount=0, notFoundCount=0;
+  ids.forEach(id=>{
+    const rec=records.find(r=>r.id===id);
+    const ref=rec?recordRef(rec):'';
+    if(ref&&_verfileMatches[ref])verifiedCount++;
+    else if(ref&&_verfileNotFound.has(ref))notFoundCount++;
+  });
+  let msg;
+  if(verifiedCount&&notFoundCount){
+    msg='Remove '+ids.length+' selected record'+(ids.length===1?'':'s')+'?\n\n'+
+        '• '+verifiedCount+' recently-verified\n'+
+        '• '+notFoundCount+' no longer in the Verfile (likely Gone or Not Wanted)\n\n'+
+        'This cannot be undone.';
+  } else if(notFoundCount){
+    msg='Remove '+notFoundCount+' record'+(notFoundCount===1?'':'s')+' that '+(notFoundCount===1?'is':'are')+' no longer in the Verfile (likely Gone or Not Wanted)?\n\nThis cannot be undone.';
+  } else {
+    msg='Remove '+verifiedCount+' recently verified record'+(verifiedCount===1?'':'s')+' from this project?\n\nThis cannot be undone.';
+  }
+  if(!confirm(msg))return;
   const{error}=await sb.from('records').delete().in('id',ids);
   if(error){showToast('Remove failed: '+error.message,'error');return;}
   records=records.filter(r=>!ids.includes(r.id));
