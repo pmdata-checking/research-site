@@ -6667,13 +6667,20 @@ async function doSendEmail(){
     let _fromEmail=_userEmail;
     const _replyTo=['rob@prospectmanager.co.uk'];
     if(_userDomain==='prospectmanager.co.uk'){
-      // Always reply to the user too
+      // Already on the verified domain — send AS the user directly.
       if(_userEmail&&!_replyTo.includes(_userEmail))_replyTo.unshift(_userEmail);
     }else if(_userEmail.includes('@')){
+      // Non-prospectmanager.co.uk sender (direct login OR impersonation):
+      // alias to username@prospectmanager.co.uk (the only Resend-verified
+      // domain) and put the real address in reply_to so replies reach them.
       const _username=_userEmail.split('@')[0];
       _fromEmail=_username+'@prospectmanager.co.uk';
       if(!_replyTo.includes(_userEmail))_replyTo.unshift(_userEmail);
     }
+    // TEMP diagnostic — confirms the live sender resolution for reports of
+    // "Domain not verified" errors (e.g. Jo on mra-research.co.uk). Remove
+    // once the fix is verified in production.
+    console.log('Email from:',_fromEmail,'impersonating:',_impersonating,'currentUser:',currentUser?.email,'userEmail:',_userEmail,'userDomain:',_userDomain,'replyTo:',_replyTo);
     const res=await fetch(EMAIL_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SB_KEY},
