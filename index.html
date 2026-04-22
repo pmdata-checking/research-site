@@ -2670,11 +2670,30 @@ function buildWBForm(cont,r,locked,fields){
     cw.appendChild(cg);cont.appendChild(cw);
   }
   let wdcHandledFields=new Set();if(isWDC)wdcHandledFields=buildWDCSections(cont,r,locked,fields);
-  // Product Info
-  // Only show Product Info if at least one field has actual data
-  const prodF=ffall(['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used','Parent_Company']);
-  const prodHasData=prodF.some(f=>getFieldVal(r,f)!=='');
-  if(prodF.length&&prodHasData)cont.appendChild(mkSection('Product Info',prodF,r,locked));
+  // Product Info (Sealed Unit Info on SU projects)
+  // Sealed Units projects render this section for EVERY record with every
+  // canonical field present, even if the record's batch didn't include
+  // that column — records with no stored value just render an empty
+  // input and save under the canonical name. For other databases the
+  // original behaviour stands: only render when the fields exist in
+  // projFields AND at least one has data.
+  const SU_CANONICAL=['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used','Parent_Company'];
+  const isSealedUnits=currentProject?.database_family==='sealed_units'
+    ||currentProject?.database_family==='rooflinebase'
+    ||(currentProject?.name||'').toLowerCase().includes('sealed unit');
+  let prodF;
+  if(isSealedUnits){
+    // Keep the imported projField name when present so edits land in the
+    // same r.data slot as existing data; otherwise fall back to the
+    // canonical key so empty rows still render and new writes have a
+    // consistent target.
+    prodF=SU_CANONICAL.map(c=>ff([c])||c);
+    cont.appendChild(mkSection('Product Info',prodF,r,locked));
+  } else {
+    prodF=ffall(SU_CANONICAL);
+    const prodHasData=prodF.some(f=>getFieldVal(r,f)!=='');
+    if(prodF.length&&prodHasData)cont.appendChild(mkSection('Product Info',prodF,r,locked));
+  }
   // Research — find flexibly
   // Research fields — always include even if not in projFields (they exist as direct columns on live DB)
   // Notes is intentionally excluded here — rendered at the top of the form alongside Private Notes.
