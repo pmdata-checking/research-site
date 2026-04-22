@@ -1117,7 +1117,7 @@ function mergeRecord(r){
 const LIST_COLS=['suref','Company','Town','Postcode','Firstn_1','Surname_1','Firstn_2','Surname_2','_status'];
 
 let sb,currentUser,projects=[],currentProject=null,records=[],projFields=[],isSuperuser=false,currentUserPermissions=[],_callbackTimestamps={},_cbSortAsc=true,_pendingProjTab=null,_verfileMatches={},_verfileSelected=new Set();
-let _impersonating=false,_realRole=null,_realPerms=null;
+let _impersonating=false,_realRole=null,_realPerms=null,_impersonatedEmail=null,_impersonatedName=null;
 let _cachedSessionToken=null;
 let currentIdx=-1,locks={},rtCh=null,saveTimer=null,lockHB=null,lockCD=null,lockExp=null;
 let currentProjTab='queue',_editSourceTab='queue',pendingCSV=null,pendingHdrs=null,conflictRes={},projToDelete=null,_rtRenderTimer=null;
@@ -4614,6 +4614,8 @@ async function signInAs(email,name,isSU){
   _realRole=isSuperuser;
   _realPerms=[...currentUserPermissions];
   _impersonating=true;
+  _impersonatedEmail=email;
+  _impersonatedName=name;
   // Fetch the target user's role and permissions
   const{data}=await sb.from('user_roles').select('role,permissions').eq('user_email',email).single();
   isSuperuser=(data?.role==='superuser')||(isSU==='true');
@@ -4646,6 +4648,7 @@ async function endImpersonation(){
   isSuperuser=_realRole;
   currentUserPermissions=[..._realPerms];
   _realRole=null;_realPerms=null;
+  _impersonatedEmail=null;_impersonatedName=null;
   // Restore real user label
   gel('userLabel').textContent=getUserDisplayName().split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
   // Hide banner and restore header
@@ -6473,8 +6476,11 @@ function maybeShowEmailPrompt(recordIdx){
   }
   const tplSel=gel('emailTpl');
   tplSel.innerHTML=visibleTpls.map(t=>`<option value="${t._idx}">${esc(t.name)}</option>`).join('');
-  // From address
-  gel('emailFrom').value=getUserDisplayName()+' <'+currentUser.email+'>';
+  // From address — when impersonating, show the impersonated user's details
+  // so the superuser can see exactly what the recipient will see.
+  const _fromName=_impersonating&&_impersonatedName?_impersonatedName:getUserDisplayName();
+  const _fromEmailDisplay=_impersonating&&_impersonatedEmail?_impersonatedEmail:currentUser.email;
+  gel('emailFrom').value=_fromName+' <'+_fromEmailDisplay+'>';
   // Reset test mode and apply first template
   gel('emailTestMode').checked=false;emailTestToggle();
   emailTemplateChanged();
@@ -6562,7 +6568,10 @@ async function doSendEmail(){
     // (Resend/SES only allows verified domain). For users on other domains
     // (e.g. jo@mra-research.co.uk) we use the username part as an alias on
     // prospectmanager.co.uk and put their real address in reply_to.
-    const _userEmail=(currentUser.email||'').trim();
+    // When impersonating, use the impersonated user's details so the recipient
+    // sees the person the superuser is acting on behalf of.
+    const _userEmail=((_impersonating&&_impersonatedEmail)?_impersonatedEmail:(currentUser.email||'')).trim();
+    const _userName=(_impersonating&&_impersonatedName)?_impersonatedName:getUserDisplayName();
     const _userDomain=_userEmail.split('@')[1]?.toLowerCase()||'';
     let _fromEmail=_userEmail;
     const _replyTo=['rob@prospectmanager.co.uk'];
@@ -6577,7 +6586,7 @@ async function doSendEmail(){
     const res=await fetch(EMAIL_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SB_KEY},
-      body:JSON.stringify({to,from_email:_fromEmail,from_name:getUserDisplayName(),subject,body,reply_to:_replyTo})
+      body:JSON.stringify({to,from_email:_fromEmail,from_name:_userName,subject,body,reply_to:_replyTo})
     });
     console.log('Email send response status:',res.status,res.statusText);
     const rawText=await res.text();
