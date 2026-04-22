@@ -6558,10 +6558,26 @@ async function doSendEmail(){
     const{data:{session}}=await sb.auth.getSession();
     if(!session?.access_token){showToast('Session expired — please sign in again','error');btn.disabled=false;btn.textContent='Send Email';return;}
     console.log('Email send: token present, length=',session.access_token.length);
+    // Email alias logic: the from address must always be @prospectmanager.co.uk
+    // (Resend/SES only allows verified domain). For users on other domains
+    // (e.g. jo@mra-research.co.uk) we use the username part as an alias on
+    // prospectmanager.co.uk and put their real address in reply_to.
+    const _userEmail=(currentUser.email||'').trim();
+    const _userDomain=_userEmail.split('@')[1]?.toLowerCase()||'';
+    let _fromEmail=_userEmail;
+    const _replyTo=['rob@prospectmanager.co.uk'];
+    if(_userDomain==='prospectmanager.co.uk'){
+      // Always reply to the user too
+      if(_userEmail&&!_replyTo.includes(_userEmail))_replyTo.unshift(_userEmail);
+    }else if(_userEmail.includes('@')){
+      const _username=_userEmail.split('@')[0];
+      _fromEmail=_username+'@prospectmanager.co.uk';
+      if(!_replyTo.includes(_userEmail))_replyTo.unshift(_userEmail);
+    }
     const res=await fetch(EMAIL_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SB_KEY},
-      body:JSON.stringify({to,from_email:currentUser.email,from_name:getUserDisplayName(),subject,body,reply_to:[currentUser.email,'rob@prospectmanager.co.uk']})
+      body:JSON.stringify({to,from_email:_fromEmail,from_name:getUserDisplayName(),subject,body,reply_to:_replyTo})
     });
     console.log('Email send response status:',res.status,res.statusText);
     const rawText=await res.text();
