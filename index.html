@@ -195,6 +195,12 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 .form-section-body.collapsed{display:none;}
 .full-w{grid-column:1/-1;}
 .private-notes-wrap{margin-bottom:16px;}
+.public-notes-wrap{margin-bottom:16px;}
+.notes-warning{display:flex;align-items:flex-start;gap:10px;background:#fff8e1;border:1px solid #f0b400;border-radius:6px;padding:10px 12px;margin:6px 0 10px;font-size:12px;color:#5a4a00;line-height:1.4;}
+.notes-warning-icon{flex-shrink:0;font-size:15px;line-height:1.2;}
+.notes-warning-text{flex:1;}
+.notes-warning-close{background:transparent;border:0;cursor:pointer;font-size:16px;color:#5a4a00;padding:0 4px;line-height:1;font-weight:700;}
+.notes-warning-close:hover{color:#000;}
 .main-grid{display:grid;grid-template-columns:1fr 1fr 280px;gap:16px 22px;margin-bottom:16px;}
 .contacts-wrap{background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden;}
 .contacts-head{background:var(--navy);padding:10px 16px;font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.9);}
@@ -2256,6 +2262,26 @@ function buildForm(r,locked){
   });
   // Enable saving after a short delay so initial form population doesn't trigger saves
   setTimeout(()=>{_formReady=true;},200);
+
+  // Public Notes visibility warning — shown on first focus/input per record open.
+  // Dismissible via the × button; stays hidden for the rest of this record session.
+  const notesTA=cont.querySelector('textarea.notes-public-ta');
+  const notesWarn=cont.querySelector('[data-notes-warning]');
+  const notesWarnClose=cont.querySelector('[data-notes-warning-close]');
+  if(notesTA&&notesWarn&&notesWarnClose){
+    let _dismissed=false;let _shown=false;
+    const showWarning=()=>{
+      if(_dismissed||_shown)return;
+      _shown=true;
+      notesWarn.style.display='flex';
+    };
+    notesTA.addEventListener('focus',showWarning);
+    notesTA.addEventListener('input',showWarning);
+    notesWarnClose.addEventListener('click',()=>{
+      _dismissed=true;
+      notesWarn.style.display='none';
+    });
+  }
   cont.querySelectorAll('[data-onsite]').forEach(cb=>{
     cb.addEventListener('change',()=>{
       const checked=[...cont.querySelectorAll('[data-onsite]:checked')].map(c=>c.dataset.onsite);
@@ -2361,6 +2387,10 @@ function buildWBForm(cont,r,locked,fields){
   // Private Notes
   const pnf=ff(['Private_Notes','Private Notes','PRIVATE_NOTES','PRIVATENOTES']);
   if(pnf)cont.innerHTML+=`<div class="private-notes-wrap"><div class="ef-label">Private Notes:</div><textarea class="ef-textarea" data-field="${pnf}" ${dis}>${esc(getFieldVal(r,pnf))}</textarea></div>`;
+
+  // Public Notes — rendered at the top so researchers see both notes fields together
+  const topNf=ff(['Notes','NOTES']);
+  if(topNf)cont.innerHTML+=`<div class="public-notes-wrap"><div class="ef-label">Notes:</div><textarea class="ef-textarea notes-public-ta" data-field="${topNf}" ${dis}>${esc(getFieldVal(r,topNf))}</textarea><div class="notes-warning" data-notes-warning style="display:none;"><span class="notes-warning-icon">&#9888;&#65039;</span><span class="notes-warning-text">These notes are visible to customers. Use the Private Notes field above for internal research notes.</span><button type="button" class="notes-warning-close" data-notes-warning-close aria-label="Dismiss">&times;</button></div></div>`;
 
   // 3-col grid — match address, company and right-col fields flexibly
   const leftF=ffall(['suref','sbref','wbref','Company_Number','CO_NUMBER','CO NUMBER','CONUMBER','add1','ADD1','add2','ADD2','add3','ADD3','add4','ADD4','Town','TOWN','Cty','CTY','COUNTY','Postcode','POSTCODE','Country','COUNTRY']);
@@ -2588,10 +2618,11 @@ function buildWBForm(cont,r,locked,fields){
   if(prodF.length&&prodHasData)cont.appendChild(mkSection('Product Info',prodF,r,locked));
   // Research — find flexibly
   // Research fields — always include even if not in projFields (they exist as direct columns on live DB)
-  const resNames=['Notes','NOTES','Researcher','RESEARCHER','Last_up','LAST UPDATED','LASTUP','Date_val','DATE VALIDATED','DATEVAL','Result','RESULT'];
+  // Notes is intentionally excluded here — rendered at the top of the form alongside Private Notes.
+  const resNames=['Researcher','RESEARCHER','Last_up','LAST UPDATED','LASTUP','Date_val','DATE VALIDATED','DATEVAL','Result','RESULT'];
   let resF=ffall(resNames);
   // Ensure critical fields are always present by checking direct column names
-  ['Notes','Researcher','Last_up','Date_val','Result'].forEach(col=>{
+  ['Researcher','Last_up','Date_val','Result'].forEach(col=>{
     if(!resF.some(f=>f.toLowerCase().replace(/[_\s]/g,'')===col.toLowerCase().replace(/[_\s]/g,''))){
       // Check if the record has this column or it exists in DIRECT_COLS
       if(DIRECT_COLS.has(col))resF.push(col);
@@ -2600,7 +2631,7 @@ function buildWBForm(cont,r,locked,fields){
   // Remaining unhandled fields
   // Collect all contact field names properly
   const contactFieldVals=contactCols.flatMap(c=>Object.values(typeof c.col==='object'?c.col:c));
-  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(pnf?[pnf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]),
+  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(pnf?[pnf]:[]),...(topNf?[topNf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]),
     // Stockistbase — mark every BM-specific field as handled so the
     // "<ProjectName> Fields" remainder section doesn't re-render them as
     // generic text inputs below the main grid. Other Contacts is handled
