@@ -6526,9 +6526,11 @@ function emailTemplateChanged(){
   // Gather all placeholder values
   const company=r?(getFieldVal(r,'Company')||getFieldVal(r,'COMPANY')||''):'';
   const contactName=r?getContactNameForEmail(r,field):'';
-  const userFullName=getUserDisplayName();
+  // When impersonating, use the impersonated user's identity for template
+  // placeholders so signature name/email match the from address the recipient sees.
+  const userFullName=(_impersonating&&_impersonatedName)?_impersonatedName:getUserDisplayName();
   const userName=userFullName.split(' ')[0]||userFullName;
-  const userEmail=currentUser?.email||'';
+  const userEmail=(_impersonating&&_impersonatedEmail)?_impersonatedEmail:(currentUser?.email||'');
   const ref=r?(getFieldVal(r,'suref')||getFieldVal(r,'wdc_wbref')||getFieldVal(r,'sbref')||getFieldVal(r,'REF')||''):'';
   const phone=r?(getFieldVal(r,'Co_Phone')||getFieldVal(r,'PHONE')||getFieldVal(r,'Phone_1')||''):'';
   // Build address from parts, skipping empty
