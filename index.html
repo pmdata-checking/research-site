@@ -395,6 +395,7 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
         <div class="presence-panel" id="presencePanel"></div>
       </div>
       <span class="h-user" id="userLabel"></span>
+      <button class="hbtn" id="createTempBtn" onclick="openCreateTempModal()" style="display:none;">+ Create Temp Project</button>
       <button class="hbtn" id="exportBtn" onclick="openModal('exportModal')" style="display:none;">↓ Export</button>
       <button class="hbtn" id="birdseyeBtn" onclick="goToBirdseye()">🦅 Timesheet</button>
       <button class="hbtn" id="activityBtn" onclick="goToActivity()">📊 Activity</button>
@@ -752,6 +753,22 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <div class="modal-actions">
       <button class="mbtn mbtn-primary" onclick="createProject()">Create Project</button>
       <button class="mbtn mbtn-cancel" onclick="closeModal('newProjModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE TEMP PROJECT MODAL (from inside a permanent project) -->
+<div class="modal-overlay" id="createTempModal">
+  <div class="modal" style="width:460px;">
+    <h3>Create Temp Project</h3>
+    <div class="modal-sub" style="margin-bottom:12px;">Creates a new temporary project that inherits this permanent project's database and column structure.</div>
+    <div class="modal-field">
+      <div class="modal-label">Project Name</div>
+      <input class="modal-input" type="text" id="createTempName" onkeydown="if(event.key==='Enter')createTempProject()">
+    </div>
+    <div class="modal-actions">
+      <button class="mbtn mbtn-primary" onclick="createTempProject()">Create</button>
+      <button class="mbtn mbtn-cancel" onclick="closeModal('createTempModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -1336,6 +1353,47 @@ async function createProject(){
   await loadProjects();renderDashboard();openProject(data.id);
 }
 
+// "+ Create Temp Project" button inside a permanent project. Spawns a new
+// temporary project inheriting the parent's database_family and exact
+// projFields column list so uploads land in the same form layout.
+function openCreateTempModal(){
+  if(!currentProject){showToast('Open a permanent project first','error');return;}
+  if(!currentProject.is_pinned){showToast('Available from permanent projects only','error');return;}
+  if(!isSuperuser){showToast('Superuser only','error');return;}
+  const now=new Date();
+  const monthName=['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
+  const parentName=currentProject.name||'Project';
+  gel('createTempName').value=parentName+' Temp — '+monthName+' '+now.getFullYear();
+  openModal('createTempModal');
+  setTimeout(()=>{const inp=gel('createTempName');if(inp){inp.focus();inp.select();}},50);
+}
+async function createTempProject(){
+  if(!currentProject||!currentProject.is_pinned){showToast('Parent is not a permanent project','error');return;}
+  const name=val('createTempName').trim();
+  if(!name){alert('Enter a project name.');return;}
+  // Mirror the parent's column list exactly. projFields is the live parsed
+  // array; encode back to JSON for the fields column.
+  const fieldsJson=JSON.stringify(projFields||[]);
+  const payload={
+    name,
+    fields:fieldsJson,
+    created_by:currentUser.email,
+    is_pinned:false,
+    database_family:currentProject.database_family||null,
+    parent_project_id:currentProject.id,
+  };
+  const{data,error}=await sb.from('projects').insert(payload).select().single();
+  if(error){showToast('Create failed: '+error.message,'error');return;}
+  closeModal('createTempModal');
+  await loadProjects();
+  const toastMsg='Temp project "'+name+'" created';
+  if(confirm('"'+name+'" created.\n\nOpen the new project now, or stay on this one?\n\nClick OK to open, Cancel to stay.')){
+    openProject(data.id);
+  } else {
+    showToast(toastMsg,'done');
+  }
+}
+
 function openDeleteProjModal(id,name,e){
   e.stopPropagation();projToDelete={id,name};
   gel('delProjMsg').textContent='Are you sure you want to delete "'+name+'"?';
@@ -1441,7 +1499,7 @@ async function doUnlinkProject(){
 }
 
 function renderDashboard(){
-  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
+  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   showScreen('dashboard');
   const grid=gel('dashGrid');grid.innerHTML='';
 
@@ -1603,6 +1661,8 @@ async function openProject(projId,initialTab){
   });
   gel('backBtn').style.display='flex';
   gel('exportBtn').style.display=hasPermission('can_export')?'inline-block':'none';
+  const ctBtn=gel('createTempBtn');
+  if(ctBtn)ctBtn.style.display=(isSuperuser&&projR.data&&projR.data.is_pinned)?'inline-block':'none';
   const pnl=gel('projNameLabel');if(pnl)pnl.textContent=projR.data.name;
   const impBtn=gel('importCsvBtn');if(impBtn)impBtn.style.display=isSuperuser?'':'none';
   const delQ=gel('deleteQBtn');if(delQ)delQ.style.display=isSuperuser?'inline-block':'none';
@@ -1634,7 +1694,7 @@ async function openProject(projId,initialTab){
 function goToDashboard(){
   releaseLock(currentIdx);currentIdx=-1;clearInterval(lockCD);removeActionBar();
   currentProject=null;records=[];projFields=[];
-  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
+  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   loadProjects().then(renderDashboard);showScreen('dashboard');trackPresence();
 }
 
@@ -1799,7 +1859,7 @@ window.addEventListener('popstate',e=>{
   const screen=e.state?.screen||'dashboard';
   showScreen(screen,true);
   // If navigating back to dashboard, reset project state
-  if(screen==='dashboard'){currentProject=null;records=[];projFields=[];gel('backBtn').style.display='none';gel('exportBtn').style.display='none';loadProjects().then(renderDashboard);}
+  if(screen==='dashboard'){currentProject=null;records=[];projFields=[];gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';loadProjects().then(renderDashboard);}
 });
 
 function updateCounts(){
@@ -4795,6 +4855,7 @@ async function goToUsers(){
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
   gel('backBtn').style.display='none';
   gel('exportBtn').style.display='none';
+  if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   showScreen('users');
   await loadUsers();
 }
@@ -5059,7 +5120,7 @@ let activityData=[];
 async function goToActivity(){
   if(currentIdx>=0)await releaseLock(currentIdx);
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
-  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
+  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   showScreen('activity');
   const lpb=gel('linkProjBtn');if(lpb)lpb.style.display=isSuperuser?'':'none';
   // Populate project filter (group linked projects)
@@ -5527,7 +5588,7 @@ let _bsCurrentView='timesheet'; // 'timesheet' | 'dashboard' | 'ytd'
 async function goToBirdseye(){
   if(currentIdx>=0)await releaseLock(currentIdx);
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
-  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
+  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   showScreen('birdseye');
   // Show superuser/permitted toolbar buttons
   const canView=isSuperuser||hasPermission('can_view_birdseye');
@@ -7511,7 +7572,7 @@ async function loadEmailTemplates(){
 async function goToTemplates(){
   if(currentIdx>=0)await releaseLock(currentIdx);
   currentIdx=-1;removeActionBar();clearInterval(lockCD);
-  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';
+  gel('backBtn').style.display='none';gel('exportBtn').style.display='none';if(gel('createTempBtn'))gel('createTempBtn').style.display='none';
   const addBtn=gel('addTplBtn');if(addBtn)addBtn.style.display=isSuperuser?'':'none';
   showScreen('templates');
   await loadEmailTemplates();
