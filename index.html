@@ -2506,17 +2506,22 @@ function buildWBForm(cont,r,locked,fields){
   if(topNf)cont.innerHTML+=`<div class="public-notes-wrap"><div class="ef-label">Notes:</div><textarea class="ef-textarea notes-public-ta" data-field="${topNf}" ${dis}>${esc(getFieldVal(r,topNf))}</textarea><div class="notes-warning" data-notes-warning style="display:none;"><span class="notes-warning-icon">&#9888;&#65039;</span><span class="notes-warning-text">These notes are visible to customers. Use the Private Notes field above for internal research notes.</span><button type="button" class="notes-warning-close" data-notes-warning-close aria-label="Dismiss">&times;</button></div></div>`;
 
   // 3-col grid — match address, company and right-col fields flexibly
-  const leftF=ffall(['suref','sbref','wbref','Company_Number','CO_NUMBER','CO NUMBER','CONUMBER','add1','ADD1','add2','ADD2','add3','ADD3','add4','ADD4','Town','TOWN','Cty','CTY','COUNTY','Postcode','POSTCODE','Country','COUNTRY']);
-  const midF=ffall(['Company','COMPANY','aka','AKA','Co_Phone','HEAD OFFICE TEL NO','HEAD_OFFICE_TEL_NO','HEADOFFICETELNO','PHONE','MPHONE','MOBILE','Company_LinkedIn','CO_LINKEDIN','CO LINKEDIN','COLINKEDIN','Co_E-mail','CONTACT_EMAIL','CONTACT EMAIL','CONTACTEMAIL','EMAIL','website','WEBSITE','ACCREDITATIONS','Co_Fax','FAX']);
-  const regionF=ff(['region','REGION']);
+  const leftF=ffall(['suref','sbref','wbref','Windowbase ref','Windowbase Ref','WINDOWBASE REF','Company_Number','CO_NUMBER','CO NUMBER','CONUMBER','Company No.','Company No','COMPANY NO','COMPANY NO.','add1','ADD1','add2','ADD2','add3','ADD3','add4','ADD4','Town','TOWN','Cty','CTY','COUNTY','Postcode','POSTCODE','Country','COUNTRY']);
+  const midF=ffall(['Company','COMPANY','aka','AKA','Co_Phone','Company phone','Company Phone','COMPANY PHONE','HEAD OFFICE TEL NO','HEAD_OFFICE_TEL_NO','HEADOFFICETELNO','PHONE','MPHONE','MOBILE','Company_LinkedIn','CO_LINKEDIN','CO LINKEDIN','COLINKEDIN','Co_E-mail','Company E-mail address','Company E-Mail Address','Company Email Address','COMPANY EMAIL ADDRESS','COMPANY E-MAIL ADDRESS','CONTACT_EMAIL','CONTACT EMAIL','CONTACTEMAIL','EMAIL','website','Company website','Company Website','COMPANY WEBSITE','WEBSITE','ACCREDITATIONS','Co_Fax','FAX']);
+  const regionF=ff(['region','REGION','Windowbase region','Windowbase Region','WINDOWBASE REGION']);
   const officeF=ff(['Office','HEAD OFFICE','HEADOFFICE','OFFICE']);
-  const empF=ff(['Co_Employees','SITE EMPLOYEES','SITEEMPLOYEES','EMPLOYEES','NO OF EMPLOYEES']);
+  const empF=ff(['Co_Employees','SITE EMPLOYEES','SITEEMPLOYEES','EMPLOYEES','NO OF EMPLOYEES','No. of Employees','No of Employees','NO. OF EMPLOYEES']);
+  // CreditSafe Rating — rendered as a plain text row in the right column if
+  // the imported CSV carries it (e.g. Aperture Works Demo project). No
+  // special UI, just so it doesn't land in the remainder "<Name> Fields"
+  // section.
+  const creditSafeRatingF=ff(['CreditSafe Rating','CreditSafe rating','Credit Safe Rating','CREDITSAFE RATING','CREDIT SAFE RATING','CS_Rating','CS Rating']);
   const isStockist=currentProject?.database_family==='stockistbase';
   // On stockistbase we do NOT treat OTHER CONTACTS as the onsite-activity
   // field — it's handled (and hidden) as its own BM-specific field below.
   const onsiteF=isStockist
-    ?ff(['Onsite_activity','ONSITE','ONSITE ACTIVITY'])
-    :ff(['Onsite_activity','OTHER CONTACTS','ONSITE','ONSITE ACTIVITY']);
+    ?ff(['Onsite_activity','ONSITE','ONSITE ACTIVITY','Other onsite activity','OTHER ONSITE ACTIVITY'])
+    :ff(['Onsite_activity','OTHER CONTACTS','ONSITE','ONSITE ACTIVITY','Other onsite activity','OTHER ONSITE ACTIVITY']);
   const callLevelF=ff(['CALL_LEVEL','Call Level','CALLLEVEL','Call_Level']);
   const wdcCoSizeF=ff(['CO_SIZE']);const wdcSiteF=ff(['SITE']);const wdcInstallF=ff(['INSTALL']);const wdcMakeF=ff(['MAKE']);const wdcSupplyF=ff(['SUPPLY']);const isWDC=!!(wdcInstallF||wdcMakeF||wdcSupplyF||wdcCoSizeF);
   // Stockistbase-specific fields — every lookup is case/separator-flexible
@@ -2570,7 +2575,7 @@ function buildWBForm(cont,r,locked,fields){
   // Branch No on SU appended to the end of midF so it sits below the other
   // mid-column rows (below Fax / Parent Company).
   if(suBranchNoF&&!midF.includes(suBranchNoF))midF.push(suBranchNoF);
-  const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist);
+  const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist||isSealedUnits||creditSafeRatingF);
   const countryF=ff(['Country','COUNTRY']);
   if(leftF.length||midF.length||hasRight){
     const g=document.createElement('div');g.className='main-grid';
@@ -2675,6 +2680,7 @@ function buildWBForm(cont,r,locked,fields){
     }
     if(callLevelF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">Call Level:</div>';w.appendChild(mkWDCCodeSel(callLevelF,['S','R'],{'S':'S: Senior','R':'R: Reception'},getFieldVal(r,callLevelF)||'',locked));rc.appendChild(w);}
     if(empF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">No. of Employees:</div>`;w.appendChild(mkSel(empF,EMP_OPT,resolveOption(r[empF]||'',EMP_MAP,EMP_OPT),locked));rc.appendChild(w);}
+    if(creditSafeRatingF){const w=document.createElement('div');w.className='ef-field';w.innerHTML=`<div class="ef-label">CreditSafe Rating:</div><input class="ef-input" type="text" data-field="${creditSafeRatingF}" value="${esc(getFieldVal(r,creditSafeRatingF))}" ${dis}>`;rc.appendChild(w);}
     if(isStockist){
       // Branch Tag — read-only display plus a "View Head Office" button
       // that opens the side panel and POSTs to /checking/api/branch-head-office/.
@@ -2885,7 +2891,7 @@ function buildWBForm(cont,r,locked,fields){
   // Remaining unhandled fields
   // Collect all contact field names properly
   const contactFieldVals=contactCols.flatMap(c=>Object.values(typeof c.col==='object'?c.col:c));
-  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(pnf?[pnf]:[]),...(topNf?[topNf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]),
+  const allHandled=new Set([...leftF,...midF,...(regionF?[regionF]:[]),...(officeF?[officeF]:[]),...(empF?[empF]:[]),...(onsiteF?[onsiteF]:[]),...(creditSafeRatingF?[creditSafeRatingF]:[]),...(pnf?[pnf]:[]),...(topNf?[topNf]:[]),...contactFieldVals,...prodF,...resF,...wdcHandledFields,...(wdcCoSizeF?[wdcCoSizeF]:[]),...(wdcSiteF?[wdcSiteF]:[]),...(wdcInstallF?[wdcInstallF]:[]),...(wdcMakeF?[wdcMakeF]:[]),...(wdcSupplyF?[wdcSupplyF]:[]),...(ff(['CHKSUM'])?[ff(['CHKSUM'])]:[]),...(callLevelF?[callLevelF]:[]),...(ff(['Interviewer'])?[ff(['Interviewer'])]:[]),...(ff(['ACCREDITATIONS'])?[ff(['ACCREDITATIONS'])]:[]),...(ff(['suref'])?[ff(['suref'])]:[]),...(ff(['Last_up'])?[ff(['Last_up'])]:[]),...(ff(['Date_val'])?[ff(['Date_val'])]:[]),
     // Stockistbase — mark every BM-specific field as handled so the
     // "<ProjectName> Fields" remainder section doesn't re-render them as
     // generic text inputs below the main grid. Other Contacts is handled
