@@ -1044,6 +1044,26 @@ const BUYING_GROUP_OPT=['None','PHG','NBG','H&B','IBC','IPG','FORTIS','TBG'];
 const HEAVY_LIGHT_OPT=['Heavyside','Lightside'];
 const ASSOCIATION_OPT=['NMBS','BMF'];
 const SCOPE_OPT=['National','Regional','Independent'];
+// Sealed Units (rooflinebase / sealed_units / name-matched) — right-column
+// checkbox and Product Info options.
+const SPACER_TECH_OPT=['Rigid','Flexible'];
+const SPACER_BRAND_OPT=['Edgetech','Swisspacer','Thermobar','DGS','Thermoseal'];
+// Products Made: short code is stored, full label is displayed. Both forms
+// are accepted on load via PRODUCTS_MADE_CODE_BY_LABEL below.
+const PRODUCTS_MADE_OPT=[
+  ['DG','Double Glazing'],
+  ['3G','Triple Glazing'],
+  ['FG','Fire Glazing'],
+  ['HG','Heritage Glazing'],
+  ['TO','Toughened Glass'],
+  ['L','Laminated'],
+  ['PH','Passive House'],
+  ['EE','Energy Efficient'],
+  ['SG','Security Glazing'],
+  ['CU','Curved Glass'],
+];
+const PRODUCTS_MADE_CODES=new Set(PRODUCTS_MADE_OPT.map(p=>p[0]));
+const PRODUCTS_MADE_CODE_BY_LABEL=Object.fromEntries(PRODUCTS_MADE_OPT.map(p=>[p[1].toLowerCase(),p[0]]));
 const EMP_OPT=['A : <10 Employees','B : 10–24 Employees','C : 25–49 Employees','D : 50–99 Employees','E : 100–249 Employees','F : 250+ Employees'];
 const ONSITE_OPT=["# : Don't know or refused",'Factory','Showroom','Sales Office','Warehouse','Workshop','Depot','Distribution Centre'];
 // Maps short codes to full option strings
@@ -2479,6 +2499,19 @@ function buildWBForm(cont,r,locked,fields){
   const associationF=isStockist?ff(['ASSOCIATION','Association']):null;
   const oldMerchantTypeF=isStockist?ff(['MERCHANT_TYPE','Merchant_Type','MERCHANTTYPE','MerchantType']):null;
   const oldBuyingGroupF=isStockist?ff(['BUYING_GROUP','Buying_Group','BUYINGGROUP','BuyingGroup']):null;
+  // Sealed Units — detection accepts three shapes; the right column gets
+  // extra fields and the Product Info section is rewritten further down.
+  const isSealedUnits=currentProject?.database_family==='sealed_units'
+    ||currentProject?.database_family==='rooflinebase'
+    ||(currentProject?.name||'').toLowerCase().includes('sealed unit');
+  const suQtyF=isSealedUnits?(ff(['su_qty','SU_QTY','SUQTY','Quantity'])||'SU_QTY'):null;
+  const suRangeF=isSealedUnits?(ff(['su_range','SU_RANGE','SURANGE','Range'])||'SU_RANGE'):null;
+  const spacerTechF=isSealedUnits?(ff(['spacer_bar_tech','SPACER_BAR_TECH','SPACERBARTECH'])||'SPACER_BAR_TECH'):null;
+  const spacerBrandF=isSealedUnits?(ff(['Spacer_bar_brand','SPACER_BAR_BRAND','SPACERBARBRAND'])||'SPACER_BAR_BRAND'):null;
+  const productsMadeF=isSealedUnits?(ff(['Products_made','PRODUCTS_MADE','PRODUCTSMADE'])||'Products_made'):null;
+  const siteEmpF=isSealedUnits?(ff(['Site_Employee','SITE_EMPLOYEE','SITE EMPLOYEES','SITEEMPLOYEE','Site_Employees'])||'Site_Employee'):null;
+  const machineryUsedF=isSealedUnits?(ff(['Machinery_used','MACHINERY_USED','MACHINERYUSED'])||'Machinery_used'):null;
+  const suParentCoF=isSealedUnits?(ff(['Parent_Company','PARENT_COMPANY','PARENTCOMPANY','Parent_Co','PARENTCO','PARENT_CO'])||'Parent_Company'):null;
   // Parent Company — editable free text in the mid column, just below aka.
   // Use canonical PARENT_CO as fallback data-field so new saves land there
   // even when the imported projFields didn't carry a Parent Company column.
@@ -2487,10 +2520,16 @@ function buildWBForm(cont,r,locked,fields){
   // existing loop renders it inline with the other mid-column fields.
   if(branchTelF&&!midF.includes(branchTelF))midF.push(branchTelF);
   // Parent Company inserted directly after the aka/AKA position in midF,
-  // or appended if no aka column was found.
+  // or appended if no aka column was found. Both stockistbase and Sealed
+  // Units projects get this treatment — they use different canonical data
+  // keys (PARENT_CO vs Parent_Company) so we handle them separately.
   if(parentCoF&&!midF.includes(parentCoF)){
     const akaIdx=midF.findIndex(f=>f.toLowerCase()==='aka');
     if(akaIdx>=0)midF.splice(akaIdx+1,0,parentCoF);else midF.push(parentCoF);
+  }
+  if(suParentCoF&&!midF.includes(suParentCoF)){
+    const akaIdx=midF.findIndex(f=>f.toLowerCase()==='aka');
+    if(akaIdx>=0)midF.splice(akaIdx+1,0,suParentCoF);else midF.push(suParentCoF);
   }
   const hasRight=!!(regionF||officeF||empF||onsiteF||callLevelF||isWDC||isStockist);
   const countryF=ff(['Country','COUNTRY']);
@@ -2509,7 +2548,7 @@ function buildWBForm(cont,r,locked,fields){
     midF.forEach(f=>{const w=document.createElement('div');w.className='ef-field';const fup=f.toUpperCase();
       if(isStockist&&branchTelF&&f===branchTelF){
         w.innerHTML=`<div class="ef-label">Branch Tel</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;
-      }else if(isStockist&&parentCoF&&f===parentCoF){
+      }else if((isStockist&&parentCoF&&f===parentCoF)||(isSealedUnits&&suParentCoF&&f===suParentCoF)){
         w.innerHTML=`<div class="ef-label">Parent Company</div><input class="ef-input" type="text" data-field="${f}" value="${esc(getFieldVal(r,f))}" ${dis}>`;
       }else if(fup==='ACCREDITATIONS'){
         const stored=(getFieldVal(r,f)||'').split(/\s*,\s*/).filter(Boolean);
@@ -2626,6 +2665,73 @@ function buildWBForm(cont,r,locked,fields){
       }
     }
     if(onsiteF){const rawOnsite=(r[onsiteF]||'').split(',').map(s=>s.trim()).filter(Boolean);const checked=rawOnsite.map(v=>ONSITE_OPT.find(o=>o===v||o.toLowerCase().includes(v.toLowerCase())||v.toLowerCase().includes(o.toLowerCase()))||v);const ow=document.createElement('div');ow.className='onsite-wrap';ow.innerHTML=`<div class="onsite-title">Other onsite activity:</div><div class="onsite-list">${ONSITE_OPT.map(o=>`<label class="onsite-item"><input type="checkbox" data-onsite="${o}" ${checked.includes(o)?'checked':''} ${dis}> ${o}</label>`).join('')}</div>`;rc.appendChild(ow);}
+    // Sealed Units right-column additions — sit directly below Other
+    // Onsite Activity. Products per week / Range are plain text; Spacer
+    // Bar Tech and Spacer Bar Brand are checkbox groups. Spacer Brand
+    // also accepts a free-text "Other" whose value is stored as
+    // "Other: <text>" on the end of the /-joined list.
+    if(isSealedUnits){
+      if(suQtyF){
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML=`<div class="ef-label">Products per week:</div><input class="ef-input" type="text" data-field="${suQtyF}" value="${esc(getFieldVal(r,suQtyF))}" ${dis}>`;
+        rc.appendChild(w);
+      }
+      if(suRangeF){
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML=`<div class="ef-label">Range:</div><input class="ef-input" type="text" data-field="${suRangeF}" value="${esc(getFieldVal(r,suRangeF))}" ${dis}>`;
+        rc.appendChild(w);
+      }
+      if(spacerTechF){
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML='<div class="ef-label">Spacer Bar Tech:</div>';
+        const stored=(getFieldVal(r,spacerTechF)||'').split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
+        const grp=document.createElement('div');grp.className='wdc-check-group';grp.dataset.multiField=spacerTechF;
+        SPACER_TECH_OPT.forEach(opt=>{
+          const lbl=document.createElement('label');lbl.className='wdc-check-item';
+          const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=stored.some(s=>s.toLowerCase()===opt.toLowerCase());if(locked)cb.disabled=true;
+          lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));grp.appendChild(lbl);
+        });
+        w.appendChild(grp);rc.appendChild(w);
+      }
+      if(spacerBrandF){
+        const w=document.createElement('div');w.className='ef-field';
+        w.innerHTML='<div class="ef-label">Spacer Bar Brand:</div>';
+        const raw=getFieldVal(r,spacerBrandF)||'';
+        const parts=raw.split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
+        const knownLowerSet=new Set(SPACER_BRAND_OPT.map(o=>o.toLowerCase()));
+        const initialChecked=new Set(
+          parts.filter(p=>knownLowerSet.has(p.toLowerCase())).map(p=>p.toLowerCase())
+        );
+        const otherEntry=parts.find(p=>/^other\s*:/i.test(p));
+        const initialOther=otherEntry?otherEntry.replace(/^other\s*:\s*/i,'').trim():'';
+        const grp=document.createElement('div');grp.className='wdc-check-group';
+        const cbs=[];
+        SPACER_BRAND_OPT.forEach(opt=>{
+          const lbl=document.createElement('label');lbl.className='wdc-check-item';
+          const cb=document.createElement('input');cb.type='checkbox';cb.value=opt;cb.checked=initialChecked.has(opt.toLowerCase());if(locked)cb.disabled=true;
+          cbs.push(cb);
+          lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+opt));grp.appendChild(lbl);
+        });
+        w.appendChild(grp);
+        const otherWrap=document.createElement('div');otherWrap.style.marginTop='6px';otherWrap.style.display='flex';otherWrap.style.alignItems='center';otherWrap.style.gap='6px';
+        const otherLbl=document.createElement('span');otherLbl.style.cssText='font-size:12px;color:var(--muted);font-weight:600;';otherLbl.textContent='Other:';
+        const otherInp=document.createElement('input');otherInp.type='text';otherInp.className='ef-input';otherInp.style.flex='1';otherInp.placeholder='Other brand';otherInp.value=initialOther;if(locked)otherInp.disabled=true;
+        otherWrap.appendChild(otherLbl);otherWrap.appendChild(otherInp);w.appendChild(otherWrap);
+        // Custom save — data-multi-field can't prefix the free-text entry with
+        // "Other:", so we build the stored string ourselves and write straight
+        // to records[currentIdx][spacerBrandF], then scheduleSave().
+        function saveSpacerBrand(){
+          const checkedVals=cbs.filter(c=>c.checked).map(c=>c.value);
+          const otherVal=otherInp.value.trim();
+          const all=[...checkedVals];
+          if(otherVal)all.push('Other: '+otherVal);
+          if(currentIdx>=0){records[currentIdx][spacerBrandF]=all.join(' / ');scheduleSave();}
+        }
+        cbs.forEach(cb=>cb.addEventListener('change',saveSpacerBrand));
+        otherInp.addEventListener('input',saveSpacerBrand);
+        rc.appendChild(w);
+      }
+    }
     if(isWDC){
       if(wdcCoSizeF){const w=document.createElement('div');w.className='ef-field';w.innerHTML='<div class="ef-label">No. of Employees:</div>';w.appendChild(mkWDCCodeSel(wdcCoSizeF,WDC_CO_SIZE_OPT,WDC_CO_SIZE_LABELS,getFieldVal(r,wdcCoSizeF)||'',locked));rc.appendChild(w);}
       if(wdcSiteF){const sv=getFieldVal(r,wdcSiteF)||'';const schecked=sv.split(/[\/,\s]+/).filter(Boolean);const ow=document.createElement('div');ow.className='onsite-wrap';ow.innerHTML='<div class="onsite-title">Other onsite activity:</div><div class="onsite-list">'+WDC_SITE_OPT.map(o=>'<label class="onsite-item"><input type="checkbox" data-wsite="'+o+'" '+(schecked.includes(o)?'checked':'')+' '+(locked?'disabled':'')+'>'+( WDC_SITE_LABELS[o]||o)+'</label>').join('')+'</div>';rc.appendChild(ow);}
@@ -2670,26 +2776,61 @@ function buildWBForm(cont,r,locked,fields){
     cw.appendChild(cg);cont.appendChild(cw);
   }
   let wdcHandledFields=new Set();if(isWDC)wdcHandledFields=buildWDCSections(cont,r,locked,fields);
-  // Product Info (Sealed Unit Info on SU projects)
-  // Sealed Units projects render this section for EVERY record with every
-  // canonical field present, even if the record's batch didn't include
-  // that column — records with no stored value just render an empty
-  // input and save under the canonical name. For other databases the
-  // original behaviour stands: only render when the fields exist in
-  // projFields AND at least one has data.
-  const SU_CANONICAL=['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used','Parent_Company'];
-  const isSealedUnits=currentProject?.database_family==='sealed_units'
-    ||currentProject?.database_family==='rooflinebase'
-    ||(currentProject?.name||'').toLowerCase().includes('sealed unit');
-  let prodF;
+  // Product Info
+  // For Sealed Units projects, this section is a hand-built layout holding
+  // only Products Made (checkbox group with DG/3G/FG/HG/TO/L/PH/EE/SG/CU
+  // codes), Site Employees (EMP_OPT dropdown) and Machinery Used (free
+  // text). The other SU fields (Quantity, Range, Spacer Bar Tech/Brand,
+  // Parent Company) are rendered in the main grid above. Non-SU projects
+  // keep the original "only if at least one field has data" behaviour.
+  let prodF=[];
   if(isSealedUnits){
-    // Keep the imported projField name when present so edits land in the
-    // same r.data slot as existing data; otherwise fall back to the
-    // canonical key so empty rows still render and new writes have a
-    // consistent target.
-    prodF=SU_CANONICAL.map(c=>ff([c])||c);
-    cont.appendChild(mkSection('Product Info',prodF,r,locked));
+    const sec=document.createElement('div');sec.className='form-section';
+    const body=document.createElement('div');body.className='form-section-body';
+    // Products Made — stored as codes (DG / 3G / FG / ...). Existing data
+    // may use full labels; we map both forms to the code on load.
+    if(productsMadeF){
+      const w=document.createElement('div');w.className='full-w';
+      w.innerHTML='<div class="ef-label">Products Made</div>';
+      const raw=getFieldVal(r,productsMadeF)||'';
+      const parts=raw.split(/\s*\/\s*/).map(s=>s.trim()).filter(Boolean);
+      const checkedCodes=new Set();
+      parts.forEach(p=>{
+        const up=p.toUpperCase();
+        if(PRODUCTS_MADE_CODES.has(up))checkedCodes.add(up);
+        else{
+          const byLabel=PRODUCTS_MADE_CODE_BY_LABEL[p.toLowerCase()];
+          if(byLabel)checkedCodes.add(byLabel);
+        }
+      });
+      const grp=document.createElement('div');grp.className='wdc-check-group';grp.dataset.multiField=productsMadeF;
+      PRODUCTS_MADE_OPT.forEach(([code,label])=>{
+        const lbl=document.createElement('label');lbl.className='wdc-check-item';
+        const cb=document.createElement('input');cb.type='checkbox';cb.value=code;cb.checked=checkedCodes.has(code);if(locked)cb.disabled=true;
+        lbl.appendChild(cb);lbl.appendChild(document.createTextNode(' '+label+' ('+code+')'));grp.appendChild(lbl);
+      });
+      w.appendChild(grp);body.appendChild(w);
+    }
+    // Site Employees — reuse EMP_OPT (same dropdown used by Company Employees).
+    if(siteEmpF){
+      const w=document.createElement('div');
+      w.innerHTML='<div class="ef-label">Site Employees</div>';
+      w.appendChild(mkSel(siteEmpF,EMP_OPT,resolveOption(r[siteEmpF]||getFieldVal(r,siteEmpF)||'',EMP_MAP,EMP_OPT),locked));
+      body.appendChild(w);
+    }
+    // Machinery Used — free text, unchanged.
+    if(machineryUsedF){
+      const w=document.createElement('div');
+      w.innerHTML=`<div class="ef-label">Machinery Used</div><input class="ef-input" type="text" data-field="${machineryUsedF}" value="${esc(getFieldVal(r,machineryUsedF))}" ${dis}>`;
+      body.appendChild(w);
+    }
+    sec.innerHTML=`<div class="form-section-head" onclick="toggleSec(this)">Product Info<span>▾</span></div>`;
+    sec.appendChild(body);
+    cont.appendChild(sec);
   } else {
+    // Non-SU projects: existing behaviour — only render when at least one
+    // SU-flavoured field has data on this record.
+    const SU_CANONICAL=['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used','Parent_Company'];
     prodF=ffall(SU_CANONICAL);
     const prodHasData=prodF.some(f=>getFieldVal(r,f)!=='');
     if(prodF.length&&prodHasData)cont.appendChild(mkSection('Product Info',prodF,r,locked));
@@ -2714,7 +2855,12 @@ function buildWBForm(cont,r,locked,fields){
     // "<ProjectName> Fields" remainder section doesn't re-render them as
     // generic text inputs below the main grid. Other Contacts is handled
     // here too — it's deliberately never rendered.
-    ...(branchTelF?[branchTelF]:[]),...(branchTagF?[branchTagF]:[]),...(outletsF?[outletsF]:[]),...(scopeF?[scopeF]:[]),...(heavyLightF?[heavyLightF]:[]),...(otherContactsF?[otherContactsF]:[]),...(otherServicesF?[otherServicesF]:[]),...(associationF?[associationF]:[]),...(oldMerchantTypeF?[oldMerchantTypeF]:[]),...(oldBuyingGroupF?[oldBuyingGroupF]:[]),...(parentCoF&&midF.includes(parentCoF)?[parentCoF]:[])]);
+    ...(branchTelF?[branchTelF]:[]),...(branchTagF?[branchTagF]:[]),...(outletsF?[outletsF]:[]),...(scopeF?[scopeF]:[]),...(heavyLightF?[heavyLightF]:[]),...(otherContactsF?[otherContactsF]:[]),...(otherServicesF?[otherServicesF]:[]),...(associationF?[associationF]:[]),...(oldMerchantTypeF?[oldMerchantTypeF]:[]),...(oldBuyingGroupF?[oldBuyingGroupF]:[]),...(parentCoF&&midF.includes(parentCoF)?[parentCoF]:[]),
+    // Sealed Units — every SU field rendered above (right-column, mid-col
+    // Parent Company, Product Info section) gets added so the remainder
+    // "<ProjectName> Fields" block doesn't re-render any of them as a
+    // generic text input below the main grid.
+    ...(suQtyF?[suQtyF]:[]),...(suRangeF?[suRangeF]:[]),...(spacerTechF?[spacerTechF]:[]),...(spacerBrandF?[spacerBrandF]:[]),...(productsMadeF?[productsMadeF]:[]),...(siteEmpF?[siteEmpF]:[]),...(machineryUsedF?[machineryUsedF]:[]),...(suParentCoF?[suParentCoF]:[])]);
   const rem=fields.filter(f=>!allHandled.has(f));
   if(rem.length){
     const remTitle=(currentProject?.name||'Project')+' Fields';
