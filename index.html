@@ -739,7 +739,15 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
     <h3>New Project</h3>
     <div class="modal-sub">Give this research project a name. You can import a CSV or add records manually afterwards.</div>
     <div class="modal-field"><div class="modal-label">Project Name</div><input class="modal-input" type="text" id="newProjName" placeholder="e.g. Sealed Unit Manufacturers" onkeydown="if(event.key==='Enter')createProject()"></div>
-    <div class="modal-field" id="newProjPinnedWrap" style="display:none;"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="newProjPinned" style="width:16px;height:16px;" onchange="gel('newProjFamilyWrap').style.display=this.checked?'':'none'"> This is a permanent project (always visible on dashboard even when empty)</label></div>
+    <div class="modal-field" id="newProjTempDbWrap"><div class="modal-label">Database (optional)</div><select class="modal-input" id="newProjTempDb">
+      <option value="">(None)</option>
+      <option value="windowbase">WindowBASE</option>
+      <option value="rooflinebase">Sealed Units</option>
+      <option value="stockistbase">Builders Merchants</option>
+      <option value="builderbase">High End</option>
+      <option value="specifiersbase">Specifiers</option>
+    </select></div>
+    <div class="modal-field" id="newProjPinnedWrap" style="display:none;"><label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="newProjPinned" style="width:16px;height:16px;" onchange="gel('newProjFamilyWrap').style.display=this.checked?'':'none';gel('newProjTempDbWrap').style.display=this.checked?'none':'';"> This is a permanent project (always visible on dashboard even when empty)</label></div>
     <div class="modal-field" id="newProjFamilyWrap" style="display:none;"><div class="modal-label">Database Family</div><select class="modal-input" id="newProjFamily"><option value="">None / Independent</option><option value="windowbase">windowBASE</option><option value="stockistbase">stockistBASE</option><option value="rooflinebase">rooflineBASE</option><option value="specifiersbase">specifiersBASE</option><option value="builderbase">builder+improverBASE</option></select></div>
     <div class="modal-actions">
       <button class="mbtn mbtn-primary" onclick="createProject()">Create Project</button>
@@ -1315,7 +1323,12 @@ async function loadProjects(){
 async function createProject(){
   const name=val('newProjName').trim();if(!name){alert('Enter a project name.');return;}
   const pinned=!!(gel('newProjPinned')&&gel('newProjPinned').checked);
-  const family=pinned?(gel('newProjFamily')?.value||null):null;
+  // Permanent projects still go through the superuser-only family selector;
+  // temporary projects use the new optional Database dropdown so the form
+  // layout + card colour can pick up the right family without pinning.
+  const family=pinned
+    ?(gel('newProjFamily')?.value||null)
+    :(gel('newProjTempDb')?.value||null);
   const{data,error}=await sb.from('projects').insert({name,fields:'[]',created_by:currentUser.email,is_pinned:pinned,database_family:family||null}).select().single();
   if(error){showToast('Error: '+error.message,'error');return;}
   closeModal('newProjModal');gel('newProjName').value='';
@@ -1440,7 +1453,10 @@ function renderDashboard(){
   function makeParentCard(p){
     const isPinned=!!p.is_pinned;
     const isPriority=!!p.is_priority;
-    const famColour=isPinned&&p.database_family?FAMILY_COLOURS[p.database_family]||null:null;
+    // Colour the card by database family whenever one is set — applies to
+    // both permanent (is_pinned) projects and temporary projects that
+    // picked a database in the create-project modal.
+    const famColour=p.database_family?FAMILY_COLOURS[p.database_family]||null:null;
     const famLabel=p.database_family?FAMILY_LABELS[p.database_family]||'':'';
     const headerStyle=famColour?`background:${famColour};`:'';
     const c=document.createElement('div');c.className='project-card'+(isPinned?' pinned-card':'');c.onclick=()=>openProject(p.id);
@@ -4534,6 +4550,8 @@ function openModal(id){
     const pc=gel('newProjPinned');if(pc)pc.checked=false;
     const fw=gel('newProjFamilyWrap');if(fw)fw.style.display='none';
     const fs=gel('newProjFamily');if(fs)fs.value='';
+    const tw=gel('newProjTempDbWrap');if(tw)tw.style.display='';
+    const ts=gel('newProjTempDb');if(ts)ts.value='';
   }
   if(id==='newUserModal'){
     const btn=gel('nuBtn');
