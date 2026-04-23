@@ -2352,9 +2352,19 @@ function buildForm(r,locked){
     if(!normSeen.has(norm)){normSeen.add(norm);fields.push(normToActual[norm]||f);}
   });
 
-  // Detect Windowbase-style layout by checking case-insensitively for known field patterns
+  // Detect Windowbase-style layout. Two routes in:
+  //   1. The project's database_family is one of the WB-style families
+  //      (windowbase / stockistbase / rooflinebase / specifiersbase /
+  //      builderbase) — every family buildWBForm knows how to render.
+  //      This covers temporary projects that set a database via the
+  //      create modal or dashboard "Database" button before any CSV has
+  //      been uploaded, so projFields is empty or non-recognisable.
+  //   2. Legacy fallback: if family isn't set, sniff the projFields for
+  //      any of the known identifier columns.
   const fieldsLower=fields.map(f=>f.toLowerCase());
-  const isWB=fieldsLower.some(f=>['suref','sbref','wbref','company'].includes(f));
+  const WB_FAMILIES=new Set(['windowbase','stockistbase','rooflinebase','specifiersbase','builderbase']);
+  const familyIsWB=WB_FAMILIES.has((currentProject?.database_family||'').toLowerCase());
+  const isWB=familyIsWB||fieldsLower.some(f=>['suref','sbref','wbref','company'].includes(f));
   if(isWB)buildWBForm(cont,r,locked,fields);else buildGenericForm(cont,r,locked,fields);
   // Track initial values so auto-save only fires when the user actually changes something
   let _formReady=false;
