@@ -784,20 +784,21 @@ header{background:var(--navy);height:54px;padding:0 24px;display:flex;align-item
 <!-- DATABASE FAMILY SELECTOR MODAL -->
 <div class="modal-overlay" id="familyModal">
   <div class="modal" style="width:400px;">
-    <h3 id="familyModalTitle">Select Database Family</h3>
-    <div class="modal-sub">Which database family does this project belong to?</div>
+    <h3 id="familyModalTitle">Change Database</h3>
+    <div class="modal-sub">Set the database this project belongs to — changes the card colour and the research form layout.</div>
     <div class="modal-field">
+      <div class="modal-label">Database (optional)</div>
       <select class="modal-input" id="familySelect" style="font-size:14px;padding:10px;">
-        <option value="">None / Independent</option>
-        <option value="windowbase">windowBASE</option>
-        <option value="stockistbase">stockistBASE</option>
-        <option value="rooflinebase">rooflineBASE</option>
-        <option value="specifiersbase">specifiersBASE</option>
-        <option value="builderbase">builder+improverBASE</option>
+        <option value="">(None)</option>
+        <option value="windowbase">WindowBASE</option>
+        <option value="rooflinebase">Sealed Units</option>
+        <option value="stockistbase">Builders Merchants</option>
+        <option value="builderbase">High End</option>
+        <option value="specifiersbase">Specifiers</option>
       </select>
     </div>
     <div class="modal-actions">
-      <button class="mbtn mbtn-primary" id="familyConfirmBtn" onclick="confirmFamilySelection()">Confirm</button>
+      <button class="mbtn mbtn-primary" id="familyConfirmBtn" onclick="confirmFamilySelection()">Save</button>
       <button class="mbtn mbtn-cancel" onclick="cancelFamilySelection()">Cancel</button>
     </div>
   </div>
@@ -1387,7 +1388,7 @@ async function togglePriority(projId,newPriority,e){
 function openFamilySelector(projId,currentFamily,e,mode){
   if(e)e.stopPropagation();
   _familyPendingAction={type:mode||'change',projId};
-  gel('familyModalTitle').textContent=mode==='pin'?'Select Database Family':'Change Database Family';
+  gel('familyModalTitle').textContent=mode==='pin'?'Select Database for Permanent Project':'Change Database';
   gel('familySelect').value=currentFamily||'';
   openModal('familyModal');
 }
@@ -1462,7 +1463,14 @@ function renderDashboard(){
     const c=document.createElement('div');c.className='project-card'+(isPinned?' pinned-card':'');c.onclick=()=>openProject(p.id);
     const delBtn=(!isPinned&&isSuperuser)?`<button class="pc-del" onclick="openDeleteProjModal('${p.id}','${esc(p.name)}',event)">✕ Delete</button>`:'';
     const pinToggle=isSuperuser?`<button class="pc-pin" onclick="toggleProjectPin('${p.id}',${isPinned?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPinned?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPinned?'Remove permanent status':'Make permanent'}">${isPinned?'★ Permanent':'☆ Make Permanent'}</button>`:'';
-    const changeFamily=isPinned&&isSuperuser?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;">${famLabel||'Set Family'}</button>`:'';
+    // Database selector button:
+    //   - Temporary projects (!isPinned) get an editable "Database" button
+    //     that opens the family modal so any user can change the project's
+    //     database_family after creation.
+    //   - Permanent / pinned projects do NOT get this button — their
+    //     database is locked at pin time and can only change via unpin +
+    //     re-pin. The family label still shows via famLabel on the card.
+    const changeFamily=(!isPinned)?`<button onclick="openFamilySelector('${p.id}','${p.database_family||''}',event)" style="font-size:10px;background:none;border:none;cursor:pointer;padding:2px 6px;color:rgba(255,255,255,.6);text-decoration:underline;" title="Change database for this temporary project">${famLabel||'Database'}</button>`:'';
     const priorityBtn=isSuperuser?`<button onclick="togglePriority('${p.id}',${isPriority?'false':'true'},event)" style="font-size:11px;background:none;border:none;cursor:pointer;padding:2px 6px;color:${isPriority?'#f59e0b':'rgba(255,255,255,.4)'};" title="${isPriority?'Remove priority':'Set as priority'}">${isPriority?'⚡ Priority':'⚡'}</button>`:'';
     const statClick=tab=>`onclick="event.stopPropagation();openProject('${p.id}','${tab}')" style="cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"`;
     // Callback overdue highlight
