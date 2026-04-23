@@ -1073,7 +1073,7 @@ const PRODUCTS_MADE_OPT=[
 ];
 const PRODUCTS_MADE_CODES=new Set(PRODUCTS_MADE_OPT.map(p=>p[0]));
 const PRODUCTS_MADE_CODE_BY_LABEL=Object.fromEntries(PRODUCTS_MADE_OPT.map(p=>[p[1].toLowerCase(),p[0]]));
-const EMP_OPT=['A : <10 Employees','B : 10–24 Employees','C : 25–49 Employees','D : 50–99 Employees','E : 100–249 Employees','F : 250+ Employees'];
+const EMP_OPT=['A : <10 Employees','B : 10-20 Employees','C : 21-50 Employees','D : 51-100 Employees','E : >100 Employees'];
 const ONSITE_OPT=["# : Don't know or refused",'Factory','Showroom','Sales Office','Warehouse','Workshop','Depot','Distribution Centre'];
 // Maps short codes to full option strings
 const OFFICE_MAP={'H':'H : Head Office','B':'B : Branch','F':'F : Factory','S':'S : Showroom','W':'W : Warehouse','O':'O : Other'};
