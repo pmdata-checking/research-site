@@ -4027,15 +4027,33 @@ const STANDARD_FIELDS=[
   {value:'Machinery_used',label:'Machinery Used'},
 ];
 
+// Fields the auto-matcher should NOT suggest for certain database families.
+// The dropdown itself still offers every STANDARD_FIELDS entry — we just
+// don't pre-select a Sealed-Units field when an Excel column lands on a
+// WDC project (or vice versa). The researcher can still pick it manually.
+function _autoSuggestExcluded(){
+  const fam=(currentProject?.database_family||'').toLowerCase();
+  if(fam==='windowbase'){
+    // WDC project: hide Sealed-Units product-info fields from auto-match.
+    return new Set(['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used']);
+  }
+  if(fam==='rooflinebase'){
+    // Sealed Units project: hide the WDC-only reference from auto-match.
+    return new Set(['wdc_wbref']);
+  }
+  return new Set();
+}
+
 // Auto-suggest a standard field for an incoming column name
 function autoSuggestField(colName){
+  const excluded=_autoSuggestExcluded();
   const cn=colName.toLowerCase().replace(/[_\s\-]/g,'');
   // Exact match first
   const exact=STANDARD_FIELDS.find(f=>f.value.toLowerCase()===colName.toLowerCase());
-  if(exact)return exact.value;
+  if(exact&&!excluded.has(exact.value))return exact.value;
   // Fuzzy match
   const fuzzy=STANDARD_FIELDS.find(f=>f.value.toLowerCase().replace(/[_\s\-]/g,'')===cn);
-  if(fuzzy)return fuzzy.value;
+  if(fuzzy&&!excluded.has(fuzzy.value))return fuzzy.value;
   // Common alias mapping
   const aliases={
     // Reference variants
@@ -4101,7 +4119,8 @@ function autoSuggestField(colName){
     'firstname1':'Firstn_1','surname1':'Surname_1',
     'firstn1':'Firstn_1','firstn2':'Firstn_2','firstn3':'Firstn_3',
   };
-  return aliases[cn]||'';
+  const aliasHit=aliases[cn]||'';
+  return excluded.has(aliasHit)?'':aliasHit;
 }
 
 function showMappingStep(){
@@ -4175,6 +4194,7 @@ function skipMapping(){
 
 // ── CSV UPLOAD ─────────────────────────────────────────────────
 function openUploadModal(){
+  console.log('upload modal database_family:',currentProject?.database_family);
   pendingCSV=null;pendingHdrs=null;conflictRes={};
   gel('upStep1').style.display='block';gel('upStep2').style.display='none';gel('upStep2b').style.display='none';gel('upStep3').style.display='none';
   gel('upTitle').textContent='Upload Research Records — '+currentProject.name;
