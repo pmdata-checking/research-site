@@ -4205,7 +4205,11 @@ function autoSuggestField(colName){
 function showMappingStep(){
   const hdrs=pendingHdrs;
   const tbody=gel('mappingBody');tbody.innerHTML='';
-  const opts=STANDARD_FIELDS.map(f=>`<option value="${f.value}">${f.label}</option>`).join('');
+  const excluded=_autoSuggestExcluded();
+  const opts=STANDARD_FIELDS
+    .filter(f=>!excluded.has(f.value))
+    .map(f=>`<option value="${f.value}">${f.label}</option>`)
+    .join('');
   hdrs.forEach(h=>{
     const suggested=autoSuggestField(h);
     const tr=document.createElement('tr');
