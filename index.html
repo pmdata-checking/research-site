@@ -1878,8 +1878,14 @@ function sumCols(){
   // Get all usable fields — prefer actual record fields over projFields
   const usable=actualFields.length>0?actualFields:projFields.filter(f=>!skipKeys.has(f));
   if(usable.length===0)return['_status'];
-  // Pick best summary columns
-  const ref=usable.find(f=>/^(su|sb|wb|wdc)?ref$/i.test(f)||/^(su|sb|wb)?ref/i.test(f))||usable[0];
+  // Pick best summary columns. REF detection uses looseKey (strip every
+  // non-alphanumeric) so "Windowbase ref", "WB Ref", "WBREF", "WindowBASE
+  // Ref", "WDC_WBREF", "Company Ref" all reduce to a recognisable form.
+  const _looseKey=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+  const ref=usable.find(f=>{
+    const k=_looseKey(f);
+    return /^(su|sb|wb|wdc|wdcwb|windowbase|bm|sealed|sealedunit|company|co)?ref(erence)?$/.test(k);
+  })||usable[0];
   const company=usable.find(f=>/^company$/i.test(f))||usable.find(f=>/company|name/i.test(f)&&!/number|num|co_num/i.test(f))||usable[1];
   const town=usable.find(f=>/^town$/i.test(f))||usable.find(f=>/town|city/i.test(f))||usable[2];
   const postcode=usable.find(f=>/^postcode$/i.test(f))||usable.find(f=>/post|zip/i.test(f))||usable[3];
@@ -2567,7 +2573,7 @@ function buildWBForm(cont,r,locked,fields){
 
   // 3-col grid — match address, company and right-col fields flexibly
   const leftF=ffall(['suref','sbref','wbref','Windowbase ref','Windowbase Ref','WINDOWBASE REF','Company_Number','CO_NUMBER','CO NUMBER','CONUMBER','Company No.','Company No','COMPANY NO','COMPANY NO.','add1','ADD1','add2','ADD2','add3','ADD3','add4','ADD4','Town','TOWN','Cty','CTY','COUNTY','Postcode','POSTCODE','Country','COUNTRY']);
-  const midF=ffall(['Company','COMPANY','aka','AKA','Co_Phone','Company phone','Company Phone','COMPANY PHONE','HEAD OFFICE TEL NO','HEAD_OFFICE_TEL_NO','HEADOFFICETELNO','PHONE','MPHONE','MOBILE','Company_LinkedIn','CO_LINKEDIN','CO LINKEDIN','COLINKEDIN','Co_E-mail','Company E-mail address','Company E-Mail Address','Company Email Address','COMPANY EMAIL ADDRESS','COMPANY E-MAIL ADDRESS','CONTACT_EMAIL','CONTACT EMAIL','CONTACTEMAIL','EMAIL','website','Company website','Company Website','COMPANY WEBSITE','WEBSITE','ACCREDITATIONS','Co_Fax','FAX']);
+  const midF=ffall(['Company','COMPANY','aka','AKA','Co_Phone','Company phone','Company Phone','COMPANY PHONE','HEAD OFFICE TEL NO','HEAD_OFFICE_TEL_NO','HEADOFFICETELNO','PHONE','MPHONE','MOBILE','Company_LinkedIn','CO_LINKEDIN','CO LINKEDIN','COLINKEDIN','Co_E-mail','E-mail address','Email address','E-Mail Address','Email Address','EMAIL ADDRESS','E-MAIL ADDRESS','Company E-mail address','Company E-Mail Address','Company Email Address','COMPANY EMAIL ADDRESS','COMPANY E-MAIL ADDRESS','CONTACT_EMAIL','CONTACT EMAIL','CONTACTEMAIL','EMAIL','website','Company website','Company Website','COMPANY WEBSITE','WEBSITE','ACCREDITATIONS','Co_Fax','FAX']);
   const regionF=ff(['region','REGION','Windowbase region','Windowbase Region','WINDOWBASE REGION']);
   const officeF=ff(['Office','HEAD OFFICE','HEADOFFICE','OFFICE']);
   const empF=ff(['Co_Employees','SITE EMPLOYEES','SITEEMPLOYEES','EMPLOYEES','NO OF EMPLOYEES','No. of Employees','No of Employees','NO. OF EMPLOYEES']);
@@ -2889,7 +2895,12 @@ function buildWBForm(cont,r,locked,fields){
   }
   // Contacts — detect numbered suffixes flexibly: _1/_2/_3 or 1/2/3 or 2/3
   const ctSuffixes=[['_1','1','2',' 1'],['_2','2','3',' 2'],['_3','3',' 3']];
-  const ctBases=[['Title','TITLE'],['Firstn','FIRST NAME','FIRSTNAME','FORENAME'],['Surname','SURNAME','LAST NAME','LASTNAME'],['Position','POSITION'],['Phone','PHONE','PHONE1','TEL'],['E-Mail','EMAIL','E-MAIL','EMAIL1'],['LinkedIn','LINKEDIN','LINKEDIN1']];
+  // Extra email bases cover hyphenated ("E-mail_1"), lowercase-m ("E-mail"),
+  // and address-suffix ("E-mail address 1") variants that appear on some
+  // imported CSVs but don't match the existing "E-Mail" + numeric-suffix
+  // combinations under ff()'s lowercase-exact / strip-underscore-and-space
+  // rules.
+  const ctBases=[['Title','TITLE'],['Firstn','FIRST NAME','FIRSTNAME','FORENAME'],['Surname','SURNAME','LAST NAME','LASTNAME'],['Position','POSITION'],['Phone','PHONE','PHONE1','TEL'],['E-Mail','EMAIL','E-MAIL','EMAIL1','E-mail','E-mail address','EMAIL ADDRESS','E-MAIL ADDRESS','Email Address','Email address'],['LinkedIn','LINKEDIN','LINKEDIN1']];
   const contactCols=[];
   for(let i=0;i<3;i++){
     const col={};
@@ -4194,7 +4205,6 @@ function skipMapping(){
 
 // ── CSV UPLOAD ─────────────────────────────────────────────────
 function openUploadModal(){
-  console.log('upload modal database_family:',currentProject?.database_family);
   pendingCSV=null;pendingHdrs=null;conflictRes={};
   gel('upStep1').style.display='block';gel('upStep2').style.display='none';gel('upStep2b').style.display='none';gel('upStep3').style.display='none';
   gel('upTitle').textContent='Upload Research Records — '+currentProject.name;
