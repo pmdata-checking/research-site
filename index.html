@@ -4058,12 +4058,17 @@ function _autoSuggestExcluded(){
 // Auto-suggest a standard field for an incoming column name
 function autoSuggestField(colName){
   const excluded=_autoSuggestExcluded();
-  const cn=colName.toLowerCase().replace(/[_\s\-]/g,'');
+  // looseKey: lowercase then strip every non-alphanumeric — so "Install
+  // PVC-U", "Install pvc-u", "INSTALL PVC-U" all reduce to "installpvcu",
+  // "Cons. Roof System" to "consroofsystem", "Install Curtain Walling?"
+  // to "installcurtainwalling". Previously we stripped only _/\s/-, which
+  // left periods / question marks in place and broke verbose WDC columns.
+  const cn=colName.toLowerCase().replace(/[^a-z0-9]/g,'');
   // Exact match first
   const exact=STANDARD_FIELDS.find(f=>f.value.toLowerCase()===colName.toLowerCase());
   if(exact&&!excluded.has(exact.value))return exact.value;
-  // Fuzzy match
-  const fuzzy=STANDARD_FIELDS.find(f=>f.value.toLowerCase().replace(/[_\s\-]/g,'')===cn);
+  // Fuzzy match using the same looseKey normalisation on both sides.
+  const fuzzy=STANDARD_FIELDS.find(f=>f.value.toLowerCase().replace(/[^a-z0-9]/g,'')===cn);
   if(fuzzy&&!excluded.has(fuzzy.value))return fuzzy.value;
   // Common alias mapping
   const aliases={
@@ -4129,6 +4134,69 @@ function autoSuggestField(colName){
     'siteemployees':'Site_Employee','noofstaff':'Co_Employees','employees':'Co_Employees',
     'firstname1':'Firstn_1','surname1':'Surname_1',
     'firstn1':'Firstn_1','firstn2':'Firstn_2','firstn3':'Firstn_3',
+    // WDC verbose-label → short-code mappings so an Excel with headers like
+    // "Install Windows" / "ALU SYSTEM SUPPLIER" / "Cons. Roof System" auto-
+    // maps to the codes buildWDCSections renders against (INST_WIN /
+    // ALU_SUPP / INST_CR_SYS). Keys are the looseKey form (lowercase, all
+    // non-alphanumeric stripped), so every case / punctuation variant in
+    // the user's spec collapses to a single entry.
+    // Installer side
+    'installwindows':'INST_WIN',
+    'installdoors':'INST_DOR',
+    'installconservatories':'INST_CON',
+    'installtimber':'INST_TIM',
+    'installaluminium':'MATL_ALU',
+    'installpvcu':'MATL_PVC',
+    'alusysteminstalled':'I_ALU_SYS',
+    'alusystemsupplier':'ALU_SUPP',
+    'pvcusysteminstalled':'I_PVC_SYS',
+    'pvcusystemsupplier':'PVC_SUPP',
+    'installcompositedoors':'I_COMP_DOR',
+    'installcompdoorsupplier':'I_CDOR_SUP',
+    'installbifolddoors':'I_BF_DOR',
+    'installbifolddoorsystem':'I_BF_SYS',
+    'installverticalsliders':'I_VS',
+    'installvssystem':'I_VS_SYS',
+    'installpatiodoors':'I_PAT_DOR',
+    'installpatiodoorsystem':'I_PAT_SYS',
+    'consroofsystem':'INST_CR_SYS',
+    'consroofsupplier':'INST_CR_SUP',
+    'installcurtainwalling':'I_CURTWALL',
+    'curtainwallmaterial':'CW_MATL',
+    'curtainwallsystem':'CW_SYS',
+    'installermarkets':'INST_MKTS',
+    'installationteams':'TEAMS',
+    'supplyonly':'SUPPLY',
+    // Fabricator side
+    'fabricate':'MAKE',
+    'fabricatormarkets':'FAB_MKTS',
+    'framesperweek':'FRAMES_PW',
+    'fabricatewindows':'FAB_WIN',
+    'fabricatedoors':'FAB_DOR',
+    'fabricateconservatories':'FAB_CON',
+    'fabricatetimber':'FAB_TIM',
+    'fabricatealuminium':'FAB_ALU',
+    'fabricatepvcu':'FAB_PVC',
+    'fabricateothermaterial':'FAB_OTH',
+    'othermaterialfabricated':'OTH_MATL_FAB',
+    'fabricatorbuywindows':'FAB_BUY_WIN',
+    'fabricatorbuydoors':'FAB_BUY_DOR',
+    'fabricatorbuyconservatories':'FAB_BUY_CON',
+    'fabricatorbifolddoorsystem':'FAB_BF_SYS',
+    'fabricateverticalsliders':'FAB_VS',
+    'fabricatevssystem':'FAB_VS_SYS',
+    'fabricatepatiodoors':'FAB_PAT_DOR',
+    'fabricatepatiodoorsystem':'FAB_PAT_SYS',
+    'fabricatecurtainwalling':'FAB_CURTWALL',
+    'fabricatebifolddoors':'FAB_BF_DOR',
+    'fabconsroofs':'FAB_CR',
+    'fabricatorbuyconsroofs':'FAB_BUY_CR',
+    'consroofsystembought':'CR_SYS_BUY',
+    'aluminiumsystem':'ALU_SYS',
+    'alusystem':'ALU_SYS',
+    'pvcusystem':'PVC_SYS',
+    'fabricatecompositedoors':'FAB_COMP_DOR',
+    'fabricatecompdoorsupplier':'FAB_CDOR_SUP',
   };
   const aliasHit=aliases[cn]||'';
   return excluded.has(aliasHit)?'':aliasHit;
