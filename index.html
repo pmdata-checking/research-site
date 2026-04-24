@@ -4036,7 +4036,134 @@ const STANDARD_FIELDS=[
   {value:'Products_made',label:'Products Made'},
   {value:'Site_Employee',label:'Site Employees'},
   {value:'Machinery_used',label:'Machinery Used'},
+  // WDC (windowbase) short codes — read by buildWDCSections via ff().
+  // These mirror the fields the WDC research form renders, so the upload
+  // mapping UI can offer them as explicit targets rather than forcing
+  // "Keep as..." fallback.
+  {value:'INSTALL',label:'WDC — Installer? (INSTALL)'},
+  {value:'SUPPLY',label:'WDC — Supply only? (SUPPLY)'},
+  {value:'MAKE',label:'WDC — Fabricator? (MAKE)'},
+  {value:'ROOF_FAB',label:'WDC — Fab cons roofs? (ROOF_FAB)'},
+  {value:'FPW',label:'WDC — Frames per week (FPW)'},
+  {value:'TEAMS',label:'WDC — Installation teams (TEAMS)'},
+  {value:'I_RTK',label:'WDC — Installer markets (I_RTK)'},
+  {value:'F_RTK',label:'WDC — Fabricator markets (F_RTK)'},
+  {value:'ACCREDITATIONS',label:'WDC — Accreditations'},
+  {value:'CHKSUM',label:'WDC — Checksum'},
+  {value:'CALL_LEVEL',label:'WDC — Call Level'},
+  {value:'Interviewer',label:'WDC — Interviewer'},
+  // Installer materials
+  {value:'MATL_WD',label:'WDC — Install Timber? (MATL_WD)'},
+  {value:'MATL_ALU',label:'WDC — Install Aluminium? (MATL_ALU)'},
+  {value:'MATL_ALU_CL',label:'WDC — Install Alu-Clad? (MATL_ALU_CL)'},
+  {value:'MATL_PVC',label:'WDC — Install PVC-U? (MATL_PVC)'},
+  {value:'MATL_OTH',label:'WDC — Install Other Material? (MATL_OTH)'},
+  {value:'I_MATERIAL',label:'WDC — Other Material Installed (I_MATERIAL)'},
+  {value:'I_ALU_SYS',label:'WDC — Alu System Installed (I_ALU_SYS)'},
+  {value:'ALU_SUPP',label:'WDC — Alu System Supplier (ALU_SUPP)'},
+  {value:'ALU_LOC',label:'WDC — Alu Location (ALU_LOC)'},
+  {value:'I_ALUCL_SYS',label:'WDC — Alu-Clad System (I_ALUCL_SYS)'},
+  {value:'ALU_CL_SUPP',label:'WDC — Alu-Clad Supplier (ALU_CL_SUPP)'},
+  {value:'ALU_CL_LOC',label:'WDC — Alu-Clad Location (ALU_CL_LOC)'},
+  {value:'I_PVC_SYS',label:'WDC — PVC-U System Installed (I_PVC_SYS)'},
+  {value:'PVC_SUPP',label:'WDC — PVC-U Supplier (PVC_SUPP)'},
+  {value:'PVC_LOC',label:'WDC — PVC-U Location (PVC_LOC)'},
+  // Installer products
+  {value:'INST_WIN',label:'WDC — Install Windows? (INST_WIN)'},
+  {value:'INST_DOR',label:'WDC — Install Doors? (INST_DOR)'},
+  {value:'INST_CON',label:'WDC — Install Conservatories? (INST_CON)'},
+  {value:'I_COMP_DOR',label:'WDC — Install Composite Doors? (I_COMP_DOR)'},
+  {value:'I_CDOR_SUP',label:'WDC — Composite Door Supplier (I_CDOR_SUP)'},
+  {value:'INST_CR_SYS',label:'WDC — Install Cons Roof System (INST_CR_SYS)'},
+  {value:'INST_CR_SUPP',label:'WDC — Cons Roof Supplier (INST_CR_SUPP)'},
+  {value:'I_CURTWALL',label:'WDC — Install Curtain Walling? (I_CURTWALL)'},
+  {value:'I_M_CWALL',label:'WDC — Install Curtain Wall Material (I_M_CWALL)'},
+  {value:'I_SYS_CWAL',label:'WDC — Install Curtain Wall System (I_SYS_CWAL)'},
+  {value:'I_BF_DOR',label:'WDC — Install Bi-fold Doors? (I_BF_DOR)'},
+  {value:'I_BF_SYS',label:'WDC — Install Bi-fold System (I_BF_SYS)'},
+  {value:'I_VS',label:'WDC — Install Vertical Sliders? (I_VS)'},
+  {value:'I_VS_SYS',label:'WDC — Install VS System (I_VS_SYS)'},
+  {value:'I_PAT_DOR',label:'WDC — Install Patio Doors? (I_PAT_DOR)'},
+  {value:'I_PAT_SYS',label:'WDC — Install Patio System (I_PAT_SYS)'},
+  {value:'I_ROOF_WIN',label:'WDC — Install Roof Windows? (I_ROOF_WIN)'},
+  {value:'I_SYS_RF_W',label:'WDC — Install Roof Window System (I_SYS_RF_W)'},
+  {value:'I_OTHER',label:'WDC — Install Other (I_OTHER)'},
+  // Fabricator side
+  {value:'FAB_WIN',label:'WDC — Fabricate Windows? (FAB_WIN)'},
+  {value:'FAB_DOR',label:'WDC — Fabricate Doors? (FAB_DOR)'},
+  {value:'FAB_CON',label:'WDC — Fabricate Conservatories? (FAB_CON)'},
+  {value:'FAB_WD',label:'WDC — Fabricate Timber? (FAB_WD)'},
+  {value:'FAB_ALU',label:'WDC — Fabricate Aluminium? (FAB_ALU)'},
+  {value:'FAB_ALU_CL',label:'WDC — Fabricate Alu-Clad? (FAB_ALU_CL)'},
+  {value:'FAB_PVC',label:'WDC — Fabricate PVC-U? (FAB_PVC)'},
+  {value:'FAB_OTH',label:'WDC — Fabricate Other? (FAB_OTH)'},
+  {value:'F_MATERIAL',label:'WDC — Other Material Fabricated (F_MATERIAL)'},
+  {value:'SYS_ALU',label:'WDC — Aluminium System Fabricated (SYS_ALU)'},
+  {value:'SYS_ALU_CL',label:'WDC — Alu-Clad System Fabricated (SYS_ALU_CL)'},
+  {value:'SYS_PVC',label:'WDC — PVC-U System Fabricated (SYS_PVC)'},
+  {value:'F_COMP_DOR',label:'WDC — Fab Composite Doors? (F_COMP_DOR)'},
+  {value:'F_CURTWALL',label:'WDC — Fab Curtain Walling? (F_CURTWALL)'},
+  {value:'F_M_CWALL',label:'WDC — Fab Curtain Wall Material (F_M_CWALL)'},
+  {value:'F_SYS_CWAL',label:'WDC — Fab Curtain Wall System (F_SYS_CWAL)'},
+  {value:'F_BF_DOR',label:'WDC — Fab Bi-fold Doors? (F_BF_DOR)'},
+  {value:'F_BF_SYS',label:'WDC — Fab Bi-fold System (F_BF_SYS)'},
+  {value:'F_VS',label:'WDC — Fab Vertical Sliders? (F_VS)'},
+  {value:'F_VS_SYS',label:'WDC — Fab VS System (F_VS_SYS)'},
+  {value:'F_PAT_DOR',label:'WDC — Fab Patio Doors? (F_PAT_DOR)'},
+  {value:'F_PAT_SYS',label:'WDC — Fab Patio System (F_PAT_SYS)'},
+  {value:'F_ROOF_WIN',label:'WDC — Fab Roof Windows? (F_ROOF_WIN)'},
+  {value:'F_SYS_RF',label:'WDC — Fab Roof System (F_SYS_RF)'},
+  {value:'F_OTHER',label:'WDC — Fab Other (F_OTHER)'},
+  // Buy side (fabricator buys)
+  {value:'BUY_WIN',label:'WDC — Fabricator Buys Windows? (BUY_WIN)'},
+  {value:'BUY_DOR',label:'WDC — Fabricator Buys Doors? (BUY_DOR)'},
+  {value:'BUY_CON',label:'WDC — Fabricator Buys Conservatories? (BUY_CON)'},
+  {value:'BUY_CR',label:'WDC — Fabricator Buys Cons Roofs? (BUY_CR)'},
+  {value:'BUY_CR_SYS',label:'WDC — Cons Roof System Bought (BUY_CR_SYS)'},
+  {value:'BUY_PROD',label:'WDC — Fabricator Buys Other? (BUY_PROD)'},
+  {value:'BUY_SYS',label:'WDC — Fab Other Supplier (BUY_SYS)'},
+  {value:'B_COMP_DOR',label:'WDC — Fab Buys Comp Doors? (B_COMP_DOR)'},
+  {value:'B_CDOR_SUP',label:'WDC — Fab Comp Door Supplier (B_CDOR_SUP)'},
+  {value:'B_BIFOLD',label:'WDC — Fab Buys Bi-fold? (B_BIFOLD)'},
+  {value:'B_BF_SYS',label:'WDC — Fab Bi-fold System Bought (B_BF_SYS)'},
+  {value:'B_VS',label:'WDC — Fab Buys VS? (B_VS)'},
+  {value:'B_VS_SYS',label:'WDC — Fab VS System Bought (B_VS_SYS)'},
+  {value:'B_PAT_DOR',label:'WDC — Fab Buys Patio Doors? (B_PAT_DOR)'},
+  {value:'B_PAT_SYS',label:'WDC — Fab Patio System Bought (B_PAT_SYS)'},
+  {value:'B_RF_WIN',label:'WDC — Fab Buys Roof Windows? (B_RF_WIN)'},
+  // Roof section
+  {value:'ROOF_NO',label:'WDC — Roofs Made Per Week (ROOF_NO)'},
+  {value:'ROOF_WD',label:'WDC — Timber Roofs? (ROOF_WD)'},
+  {value:'ROOF_ALU',label:'WDC — Alu Roofs? (ROOF_ALU)'},
+  {value:'ROOF_PVC',label:'WDC — PVC Roofs? (ROOF_PVC)'},
+  {value:'ROOF_OTH',label:'WDC — Other Roofs? (ROOF_OTH)'},
+  {value:'ROOF_SYS',label:'WDC — Roof System Made (ROOF_SYS)'},
 ];
+
+// All WDC-specific short codes added to STANDARD_FIELDS. Excluded from
+// auto-match and dropdown options on non-windowbase projects so Sealed-
+// Units / Builders-Merchants / future projects don't see a wall of WDC
+// fields in their mapping UI.
+const WDC_SHORT_CODES=new Set([
+  'INSTALL','SUPPLY','MAKE','ROOF_FAB','FPW','TEAMS','I_RTK','F_RTK',
+  'ACCREDITATIONS','CHKSUM','CALL_LEVEL','Interviewer',
+  'MATL_WD','MATL_ALU','MATL_ALU_CL','MATL_PVC','MATL_OTH','I_MATERIAL',
+  'I_ALU_SYS','ALU_SUPP','ALU_LOC','I_ALUCL_SYS','ALU_CL_SUPP','ALU_CL_LOC',
+  'I_PVC_SYS','PVC_SUPP','PVC_LOC',
+  'INST_WIN','INST_DOR','INST_CON','I_COMP_DOR','I_CDOR_SUP',
+  'INST_CR_SYS','INST_CR_SUPP','I_CURTWALL','I_M_CWALL','I_SYS_CWAL',
+  'I_BF_DOR','I_BF_SYS','I_VS','I_VS_SYS','I_PAT_DOR','I_PAT_SYS',
+  'I_ROOF_WIN','I_SYS_RF_W','I_OTHER',
+  'FAB_WIN','FAB_DOR','FAB_CON','FAB_WD','FAB_ALU','FAB_ALU_CL','FAB_PVC','FAB_OTH',
+  'F_MATERIAL','SYS_ALU','SYS_ALU_CL','SYS_PVC',
+  'F_COMP_DOR','F_CURTWALL','F_M_CWALL','F_SYS_CWAL',
+  'F_BF_DOR','F_BF_SYS','F_VS','F_VS_SYS','F_PAT_DOR','F_PAT_SYS',
+  'F_ROOF_WIN','F_SYS_RF','F_OTHER',
+  'BUY_WIN','BUY_DOR','BUY_CON','BUY_CR','BUY_CR_SYS','BUY_PROD','BUY_SYS',
+  'B_COMP_DOR','B_CDOR_SUP','B_BIFOLD','B_BF_SYS','B_VS','B_VS_SYS',
+  'B_PAT_DOR','B_PAT_SYS','B_RF_WIN',
+  'ROOF_NO','ROOF_WD','ROOF_ALU','ROOF_PVC','ROOF_OTH','ROOF_SYS'
+]);
 
 // Fields the auto-matcher should NOT suggest for certain database families.
 // The dropdown itself still offers every STANDARD_FIELDS entry — we just
@@ -4049,10 +4176,14 @@ function _autoSuggestExcluded(){
     return new Set(['su_qty','su_range','Spacer_bar_brand','spacer_bar_tech','Products_made','Site_Employee','Machinery_used']);
   }
   if(fam==='rooflinebase'){
-    // Sealed Units project: hide the WDC-only reference from auto-match.
-    return new Set(['wdc_wbref']);
+    // Sealed Units project: hide the WDC-only reference AND all WDC short
+    // codes so the Sealed Units upload mapping UI isn't flooded with WDC
+    // fields the SU form never renders.
+    return new Set(['wdc_wbref', ...WDC_SHORT_CODES]);
   }
-  return new Set();
+  // Non-family projects: hide WDC short codes by default. (If future
+  // families need them visible, add a branch above.)
+  return new Set(WDC_SHORT_CODES);
 }
 
 // Auto-suggest a standard field for an incoming column name
